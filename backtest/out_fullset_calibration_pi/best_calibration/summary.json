@@ -1,0 +1,31 @@
+{
+  "windows_processed": 2423,
+  "windows_with_activity": 1237,
+  "activity_rate": 0.5105241436236071,
+  "total_pairs": 8973,
+  "profitable_pairs": 5199,
+  "profit_rate": 0.5794048813105984,
+  "chase_completed": 8973,
+  "chase_rate": 1.0,
+  "total_unwinds": 3973,
+  "unwind_rate": 3.211802748585287,
+  "gross_edge_cents": 11424,
+  "unwind_loss_cents": -58922,
+  "net_pnl_cents": -47498,
+  "gross_edge_dollars": 114.24,
+  "net_pnl_dollars": -474.98,
+  "avg_pair_cost": 98.72684720829155,
+  "avg_edge_cents": 1.2731527917084586,
+  "avg_dt_secs": 12.444862922099633,
+  "avg_unwind_loss": -14.830606594512963,
+  "d_cents": 2,
+  "chase_timeout_secs": 30.0,
+  "max_pair_cost_cents": 104,
+  "fill_model": "price_improve_to_ask",
+  "histogram_match": {
+    "l1_distance": 1.1726,
+    "l2_distance": 0.3697,
+    "overlap_pct": 41.37
+  },
+  "timestamp": "2026-01-06T21:42:39.759215"
+}

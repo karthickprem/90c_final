@@ -1,0 +1,11 @@
+{
+  "timestamp": "2026-01-04T11:35:17.696530+00:00",
+  "params": {
+    "volatility": 0.25,
+    "min_edge": 1.0
+  },
+  "signals_found": 0,
+  "total_trades": 0,
+  "total_pnl": 0.0,
+  "trades": []
+}

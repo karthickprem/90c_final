@@ -1,0 +1,511 @@
+[
+  {
+    "name": "SPIKE_floor89_push94_m10",
+    "params": {
+      "persist_n": null,
+      "spike_sticky": [
+        89,
+        94,
+        10
+      ],
+      "opp_suppress": null,
+      "momentum": null,
+      "late_filter": null,
+      "stop_loss": null,
+      "time_stop": null,
+      "take_profit": null,
+      "opp_break": null,
+      "p_max": null,
+      "slip": 0
+    },
+    "trades": 1002,
+    "win_rate": 0.9581,
+    "reversal_rate": 0.0419,
+    "avg_entry": 90.74,
+    "ev_per_share": 0.0507,
+    "ev_invested": 0.0559
+  },
+  {
+    "name": "SPIKE_floor88_push94_m10",
+    "params": {
+      "persist_n": null,
+      "spike_sticky": [
+        88,
+        94,
+        10
+      ],
+      "opp_suppress": null,
+      "momentum": null,
+      "late_filter": null,
+      "stop_loss": null,
+      "time_stop": null,
+      "take_profit": null,
+      "opp_break": null,
+      "p_max": null,
+      "slip": 0
+    },
+    "trades": 1094,
+    "win_rate": 0.958,
+    "reversal_rate": 0.042,
+    "avg_entry": 90.75,
+    "ev_per_share": 0.0504,
+    "ev_invested": 0.0555
+  },
+  {
+    "name": "SPIKE_floor88_push93_m10",
+    "params": {
+      "persist_n": null,
+      "spike_sticky": [
+        88,
+        93,
+        10
+      ],
+      "opp_suppress": null,
+      "momentum": null,
+      "late_filter": null,
+      "stop_loss": null,
+      "time_stop": null,
+      "take_profit": null,
+      "opp_break": null,
+      "p_max": null,
+      "slip": 0
+    },
+    "trades": 1540,
+    "win_rate": 0.9558,
+    "reversal_rate": 0.0442,
+    "avg_entry": 90.6,
+    "ev_per_share": 0.0499,
+    "ev_invested": 0.0551
+  },
+  {
+    "name": "LATE_le100s",
+    "params": {
+      "persist_n": null,
+      "spike_sticky": null,
+      "opp_suppress": null,
+      "momentum": null,
+      "late_filter": 100,
+      "stop_loss": null,
+      "time_stop": null,
+      "take_profit": null,
+      "opp_break": null,
+      "p_max": null,
+      "slip": 0
+    },
+    "trades": 854,
+    "win_rate": 0.959,
+    "reversal_rate": 0.041,
+    "avg_entry": 90.93,
+    "ev_per_share": 0.0497,
+    "ev_invested": 0.0547
+  },
+  {
+    "name": "SPIKE_floor89_push93_m10",
+    "params": {
+      "persist_n": null,
+      "spike_sticky": [
+        89,
+        93,
+        10
+      ],
+      "opp_suppress": null,
+      "momentum": null,
+      "late_filter": null,
+      "stop_loss": null,
+      "time_stop": null,
+      "take_profit": null,
+      "opp_break": null,
+      "p_max": null,
+      "slip": 0
+    },
+    "trades": 1396,
+    "win_rate": 0.9549,
+    "reversal_rate": 0.0451,
+    "avg_entry": 90.59,
+    "ev_per_share": 0.049,
+    "ev_invested": 0.0541
+  },
+  {
+    "name": "SPIKE_floor87_push94_m10",
+    "params": {
+      "persist_n": null,
+      "spike_sticky": [
+        87,
+        94,
+        10
+      ],
+      "opp_suppress": null,
+      "momentum": null,
+      "late_filter": null,
+      "stop_loss": null,
+      "time_stop": null,
+      "take_profit": null,
+      "opp_break": null,
+      "p_max": null,
+      "slip": 0
+    },
+    "trades": 1131,
+    "win_rate": 0.9549,
+    "reversal_rate": 0.0451,
+    "avg_entry": 90.77,
+    "ev_per_share": 0.0472,
+    "ev_invested": 0.052
+  },
+  {
+    "name": "SPIKE_floor87_push93_m10",
+    "params": {
+      "persist_n": null,
+      "spike_sticky": [
+        87,
+        93,
+        10
+      ],
+      "opp_suppress": null,
+      "momentum": null,
+      "late_filter": null,
+      "stop_loss": null,
+      "time_stop": null,
+      "take_profit": null,
+      "opp_break": null,
+      "p_max": null,
+      "slip": 0
+    },
+    "trades": 1597,
+    "win_rate": 0.9524,
+    "reversal_rate": 0.0476,
+    "avg_entry": 90.61,
+    "ev_per_share": 0.0463,
+    "ev_invested": 0.0511
+  },
+  {
+    "name": "SPIKE_floor88_push93_m5",
+    "params": {
+      "persist_n": null,
+      "spike_sticky": [
+        88,
+        93,
+        5
+      ],
+      "opp_suppress": null,
+      "momentum": null,
+      "late_filter": null,
+      "stop_loss": null,
+      "time_stop": null,
+      "take_profit": null,
+      "opp_break": null,
+      "p_max": null,
+      "slip": 0
+    },
+    "trades": 1081,
+    "win_rate": 0.9528,
+    "reversal_rate": 0.0472,
+    "avg_entry": 90.85,
+    "ev_per_share": 0.0443,
+    "ev_invested": 0.0487
+  },
+  {
+    "name": "LATE_le200s",
+    "params": {
+      "persist_n": null,
+      "spike_sticky": null,
+      "opp_suppress": null,
+      "momentum": null,
+      "late_filter": 200,
+      "stop_loss": null,
+      "time_stop": null,
+      "take_profit": null,
+      "opp_break": null,
+      "p_max": null,
+      "slip": 0
+    },
+    "trades": 1767,
+    "win_rate": 0.9496,
+    "reversal_rate": 0.0504,
+    "avg_entry": 90.62,
+    "ev_per_share": 0.0434,
+    "ev_invested": 0.0479
+  },
+  {
+    "name": "SPIKE_floor89_push93_m5",
+    "params": {
+      "persist_n": null,
+      "spike_sticky": [
+        89,
+        93,
+        5
+      ],
+      "opp_suppress": null,
+      "momentum": null,
+      "late_filter": null,
+      "stop_loss": null,
+      "time_stop": null,
+      "take_profit": null,
+      "opp_break": null,
+      "p_max": null,
+      "slip": 0
+    },
+    "trades": 1019,
+    "win_rate": 0.9509,
+    "reversal_rate": 0.0491,
+    "avg_entry": 90.82,
+    "ev_per_share": 0.0428,
+    "ev_invested": 0.0471
+  },
+  {
+    "name": "SPIKE_floor89_push92_m10",
+    "params": {
+      "persist_n": null,
+      "spike_sticky": [
+        89,
+        92,
+        10
+      ],
+      "opp_suppress": null,
+      "momentum": null,
+      "late_filter": null,
+      "stop_loss": null,
+      "time_stop": null,
+      "take_profit": null,
+      "opp_break": null,
+      "p_max": null,
+      "slip": 0
+    },
+    "trades": 1919,
+    "win_rate": 0.9458,
+    "reversal_rate": 0.0542,
+    "avg_entry": 90.48,
+    "ev_per_share": 0.041,
+    "ev_invested": 0.0454
+  },
+  {
+    "name": "SPIKE_floor87_push93_m5",
+    "params": {
+      "persist_n": null,
+      "spike_sticky": [
+        87,
+        93,
+        5
+      ],
+      "opp_suppress": null,
+      "momentum": null,
+      "late_filter": null,
+      "stop_loss": null,
+      "time_stop": null,
+      "take_profit": null,
+      "opp_break": null,
+      "p_max": null,
+      "slip": 0
+    },
+    "trades": 1111,
+    "win_rate": 0.9496,
+    "reversal_rate": 0.0504,
+    "avg_entry": 90.87,
+    "ev_per_share": 0.0409,
+    "ev_invested": 0.045
+  },
+  {
+    "name": "COMBO_PERSIST8_OPPle15",
+    "params": {
+      "persist_n": 8,
+      "spike_sticky": null,
+      "opp_suppress": [
+        15,
+        20
+      ],
+      "momentum": null,
+      "late_filter": null,
+      "stop_loss": null,
+      "time_stop": null,
+      "take_profit": null,
+      "opp_break": null,
+      "p_max": null,
+      "slip": 0
+    },
+    "trades": 1822,
+    "win_rate": 0.9446,
+    "reversal_rate": 0.0554,
+    "avg_entry": 90.41,
+    "ev_per_share": 0.0405,
+    "ev_invested": 0.0448
+  },
+  {
+    "name": "SPIKE_floor88_push94_m5",
+    "params": {
+      "persist_n": null,
+      "spike_sticky": [
+        88,
+        94,
+        5
+      ],
+      "opp_suppress": null,
+      "momentum": null,
+      "late_filter": null,
+      "stop_loss": null,
+      "time_stop": null,
+      "take_profit": null,
+      "opp_break": null,
+      "p_max": null,
+      "slip": 0
+    },
+    "trades": 723,
+    "win_rate": 0.9502,
+    "reversal_rate": 0.0498,
+    "avg_entry": 91.09,
+    "ev_per_share": 0.0393,
+    "ev_invested": 0.0432
+  },
+  {
+    "name": "SPIKE_floor88_push92_m10",
+    "params": {
+      "persist_n": null,
+      "spike_sticky": [
+        88,
+        92,
+        10
+      ],
+      "opp_suppress": null,
+      "momentum": null,
+      "late_filter": null,
+      "stop_loss": null,
+      "time_stop": null,
+      "take_profit": null,
+      "opp_break": null,
+      "p_max": null,
+      "slip": 0
+    },
+    "trades": 2154,
+    "win_rate": 0.9438,
+    "reversal_rate": 0.0562,
+    "avg_entry": 90.48,
+    "ev_per_share": 0.039,
+    "ev_invested": 0.0431
+  },
+  {
+    "name": "SPIKE_floor87_push94_m5",
+    "params": {
+      "persist_n": null,
+      "spike_sticky": [
+        87,
+        94,
+        5
+      ],
+      "opp_suppress": null,
+      "momentum": null,
+      "late_filter": null,
+      "stop_loss": null,
+      "time_stop": null,
+      "take_profit": null,
+      "opp_break": null,
+      "p_max": null,
+      "slip": 0
+    },
+    "trades": 742,
+    "win_rate": 0.9501,
+    "reversal_rate": 0.0499,
+    "avg_entry": 91.1,
+    "ev_per_share": 0.0391,
+    "ev_invested": 0.0429
+  },
+  {
+    "name": "SPIKE_floor89_push94_m5",
+    "params": {
+      "persist_n": null,
+      "spike_sticky": [
+        89,
+        94,
+        5
+      ],
+      "opp_suppress": null,
+      "momentum": null,
+      "late_filter": null,
+      "stop_loss": null,
+      "time_stop": null,
+      "take_profit": null,
+      "opp_break": null,
+      "p_max": null,
+      "slip": 0
+    },
+    "trades": 681,
+    "win_rate": 0.9486,
+    "reversal_rate": 0.0514,
+    "avg_entry": 91.04,
+    "ev_per_share": 0.0382,
+    "ev_invested": 0.042
+  },
+  {
+    "name": "COMBO_PERSIST8_OPPle20",
+    "params": {
+      "persist_n": 8,
+      "spike_sticky": null,
+      "opp_suppress": [
+        20,
+        20
+      ],
+      "momentum": null,
+      "late_filter": null,
+      "stop_loss": null,
+      "time_stop": null,
+      "take_profit": null,
+      "opp_break": null,
+      "p_max": null,
+      "slip": 0
+    },
+    "trades": 1975,
+    "win_rate": 0.9403,
+    "reversal_rate": 0.0597,
+    "avg_entry": 90.42,
+    "ev_per_share": 0.0361,
+    "ev_invested": 0.0399
+  },
+  {
+    "name": "SPIKE_floor87_push92_m10",
+    "params": {
+      "persist_n": null,
+      "spike_sticky": [
+        87,
+        92,
+        10
+      ],
+      "opp_suppress": null,
+      "momentum": null,
+      "late_filter": null,
+      "stop_loss": null,
+      "time_stop": null,
+      "take_profit": null,
+      "opp_break": null,
+      "p_max": null,
+      "slip": 0
+    },
+    "trades": 2255,
+    "win_rate": 0.9406,
+    "reversal_rate": 0.0594,
+    "avg_entry": 90.49,
+    "ev_per_share": 0.0357,
+    "ev_invested": 0.0395
+  },
+  {
+    "name": "COMBO_PERSIST8_OPPle25",
+    "params": {
+      "persist_n": 8,
+      "spike_sticky": null,
+      "opp_suppress": [
+        25,
+        20
+      ],
+      "momentum": null,
+      "late_filter": null,
+      "stop_loss": null,
+      "time_stop": null,
+      "take_profit": null,
+      "opp_break": null,
+      "p_max": null,
+      "slip": 0
+    },
+    "trades": 2004,
+    "win_rate": 0.9396,
+    "reversal_rate": 0.0604,
+    "avg_entry": 90.42,
+    "ev_per_share": 0.0355,
+    "ev_invested": 0.0392
+  }
+]

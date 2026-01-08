@@ -1,0 +1,727 @@
+{
+  "timestamp": "2026-01-04T10:42:05.265857+00:00",
+  "markets_scanned": 30,
+  "opportunities_found": 0,
+  "results": [
+    {
+      "slug": "will-the-carolina-panthers-win-super-bowl-2026",
+      "volume": 54257489.498194,
+      "outcomes": [
+        "Yes",
+        "No"
+      ],
+      "prices": [
+        {
+          "outcome": "Yes",
+          "bid": 0.001,
+          "ask": 0.999
+        },
+        {
+          "outcome": "No",
+          "bid": 0.001,
+          "ask": 0.999
+        }
+      ],
+      "spreads": [
+        99.8,
+        99.8
+      ],
+      "ask_sum": 1.998,
+      "opportunity": null,
+      "min_spread": 99.8
+    },
+    {
+      "slug": "microstrategy-sell-any-bitcoin-in-2025",
+      "volume": 17808538.669867,
+      "outcomes": [
+        "Yes",
+        "No"
+      ],
+      "prices": [],
+      "spreads": [],
+      "ask_sum": 0,
+      "opportunity": null
+    },
+    {
+      "slug": "will-captain-america-new-world-order-be-the-top-grossing-movie-of-2025",
+      "volume": 14776032.420922,
+      "outcomes": [
+        "Yes",
+        "No"
+      ],
+      "prices": [],
+      "spreads": [],
+      "ask_sum": 0,
+      "opportunity": null
+    },
+    {
+      "slug": "will-how-to-train-your-dragon-be-the-top-grossing-movie-of-2025",
+      "volume": 13962305.639758,
+      "outcomes": [
+        "Yes",
+        "No"
+      ],
+      "prices": [],
+      "spreads": [],
+      "ask_sum": 0,
+      "opportunity": null
+    },
+    {
+      "slug": "will-the-fantastic-four-first-steps-be-the-top-grossing-movie-of-2025",
+      "volume": 13681497.974383,
+      "outcomes": [
+        "Yes",
+        "No"
+      ],
+      "prices": [],
+      "spreads": [],
+      "ask_sum": 0,
+      "opportunity": null
+    },
+    {
+      "slug": "will-jurassic-world-rebirth-be-the-top-grossing-movie-of-2025",
+      "volume": 11625083.458951,
+      "outcomes": [
+        "Yes",
+        "No"
+      ],
+      "prices": [],
+      "spreads": [],
+      "ask_sum": 0,
+      "opportunity": null
+    },
+    {
+      "slug": "will-a-minecraft-movie-be-the-top-grossing-movie-of-2025",
+      "volume": 11296927.966891,
+      "outcomes": [
+        "Yes",
+        "No"
+      ],
+      "prices": [
+        {
+          "outcome": "Yes",
+          "bid": 0.001,
+          "ask": 0.999
+        },
+        {
+          "outcome": "No",
+          "bid": 0.001,
+          "ask": 0.999
+        }
+      ],
+      "spreads": [
+        99.8,
+        99.8
+      ],
+      "ask_sum": 1.998,
+      "opportunity": null,
+      "min_spread": 99.8
+    },
+    {
+      "slug": "will-the-tampa-bay-buccaneers-win-super-bowl-2026",
+      "volume": 9102214.987632,
+      "outcomes": [
+        "Yes",
+        "No"
+      ],
+      "prices": [
+        {
+          "outcome": "Yes",
+          "bid": 0.001,
+          "ask": 0.999
+        },
+        {
+          "outcome": "No",
+          "bid": 0.001,
+          "ask": 0.999
+        }
+      ],
+      "spreads": [
+        99.8,
+        99.8
+      ],
+      "ask_sum": 1.998,
+      "opportunity": null,
+      "min_spread": 99.8
+    },
+    {
+      "slug": "will-zootopia-2-be-the-top-grossing-movie-of-2025",
+      "volume": 8496893.349584,
+      "outcomes": [
+        "Yes",
+        "No"
+      ],
+      "prices": [],
+      "spreads": [],
+      "ask_sum": 0,
+      "opportunity": null
+    },
+    {
+      "slug": "will-the-new-england-patriots-win-super-bowl-2026",
+      "volume": 8384086.06893,
+      "outcomes": [
+        "Yes",
+        "No"
+      ],
+      "prices": [
+        {
+          "outcome": "Yes",
+          "bid": 0.001,
+          "ask": 0.999
+        },
+        {
+          "outcome": "No",
+          "bid": 0.001,
+          "ask": 0.999
+        }
+      ],
+      "spreads": [
+        99.8,
+        99.8
+      ],
+      "ask_sum": 1.998,
+      "opportunity": null,
+      "min_spread": 99.8
+    },
+    {
+      "slug": "will-the-chicago-bears-win-super-bowl-2026",
+      "volume": 7559892.956207,
+      "outcomes": [
+        "Yes",
+        "No"
+      ],
+      "prices": [
+        {
+          "outcome": "Yes",
+          "bid": 0.001,
+          "ask": 0.999
+        },
+        {
+          "outcome": "No",
+          "bid": 0.001,
+          "ask": 0.999
+        }
+      ],
+      "spreads": [
+        99.8,
+        99.8
+      ],
+      "ask_sum": 1.998,
+      "opportunity": null,
+      "min_spread": 99.8
+    },
+    {
+      "slug": "will-jesus-christ-return-before-gta-vi-665",
+      "volume": 7501259.246353,
+      "outcomes": [
+        "Yes",
+        "No"
+      ],
+      "prices": [
+        {
+          "outcome": "Yes",
+          "bid": 0.01,
+          "ask": 0.99
+        },
+        {
+          "outcome": "No",
+          "bid": 0.01,
+          "ask": 0.99
+        }
+      ],
+      "spreads": [
+        98.0,
+        98.0
+      ],
+      "ask_sum": 1.98,
+      "opportunity": null,
+      "min_spread": 98.0
+    },
+    {
+      "slug": "will-the-jacksonville-jaguars-win-super-bowl-2026",
+      "volume": 6506933.723643,
+      "outcomes": [
+        "Yes",
+        "No"
+      ],
+      "prices": [
+        {
+          "outcome": "Yes",
+          "bid": 0.001,
+          "ask": 0.999
+        },
+        {
+          "outcome": "No",
+          "bid": 0.001,
+          "ask": 0.999
+        }
+      ],
+      "spreads": [
+        99.8,
+        99.8
+      ],
+      "ask_sum": 1.998,
+      "opportunity": null,
+      "min_spread": 99.8
+    },
+    {
+      "slug": "will-the-houston-texans-win-super-bowl-2026",
+      "volume": 6115689.381309,
+      "outcomes": [
+        "Yes",
+        "No"
+      ],
+      "prices": [
+        {
+          "outcome": "Yes",
+          "bid": 0.001,
+          "ask": 0.999
+        },
+        {
+          "outcome": "No",
+          "bid": 0.001,
+          "ask": 0.999
+        }
+      ],
+      "spreads": [
+        99.8,
+        99.8
+      ],
+      "ask_sum": 1.998,
+      "opportunity": null,
+      "min_spread": 99.8
+    },
+    {
+      "slug": "will-the-pittsburgh-steelers-win-super-bowl-2026",
+      "volume": 4706525.698655,
+      "outcomes": [
+        "Yes",
+        "No"
+      ],
+      "prices": [
+        {
+          "outcome": "Yes",
+          "bid": 0.001,
+          "ask": 0.999
+        },
+        {
+          "outcome": "No",
+          "bid": 0.001,
+          "ask": 0.999
+        }
+      ],
+      "spreads": [
+        99.8,
+        99.8
+      ],
+      "ask_sum": 1.998,
+      "opportunity": null,
+      "min_spread": 99.8
+    },
+    {
+      "slug": "will-the-seattle-seahawks-win-super-bowl-2026",
+      "volume": 4453668.495739,
+      "outcomes": [
+        "Yes",
+        "No"
+      ],
+      "prices": [
+        {
+          "outcome": "Yes",
+          "bid": 0.001,
+          "ask": 0.999
+        },
+        {
+          "outcome": "No",
+          "bid": 0.001,
+          "ask": 0.999
+        }
+      ],
+      "spreads": [
+        99.8,
+        99.8
+      ],
+      "ask_sum": 1.998,
+      "opportunity": null,
+      "min_spread": 99.8
+    },
+    {
+      "slug": "will-the-san-francisco-49ers-win-super-bowl-2026",
+      "volume": 4027144.135054,
+      "outcomes": [
+        "Yes",
+        "No"
+      ],
+      "prices": [
+        {
+          "outcome": "Yes",
+          "bid": 0.001,
+          "ask": 0.999
+        },
+        {
+          "outcome": "No",
+          "bid": 0.001,
+          "ask": 0.999
+        }
+      ],
+      "spreads": [
+        99.8,
+        99.8
+      ],
+      "ask_sum": 1.998,
+      "opportunity": null,
+      "min_spread": 99.8
+    },
+    {
+      "slug": "will-the-los-angeles-rams-win-super-bowl-2026",
+      "volume": 3989136.552981,
+      "outcomes": [
+        "Yes",
+        "No"
+      ],
+      "prices": [
+        {
+          "outcome": "Yes",
+          "bid": 0.001,
+          "ask": 0.999
+        },
+        {
+          "outcome": "No",
+          "bid": 0.001,
+          "ask": 0.999
+        }
+      ],
+      "spreads": [
+        99.8,
+        99.8
+      ],
+      "ask_sum": 1.998,
+      "opportunity": null,
+      "min_spread": 99.8
+    },
+    {
+      "slug": "will-the-buffalo-bills-win-super-bowl-2026",
+      "volume": 3836957.84902,
+      "outcomes": [
+        "Yes",
+        "No"
+      ],
+      "prices": [
+        {
+          "outcome": "Yes",
+          "bid": 0.01,
+          "ask": 0.99
+        },
+        {
+          "outcome": "No",
+          "bid": 0.01,
+          "ask": 0.99
+        }
+      ],
+      "spreads": [
+        98.0,
+        98.0
+      ],
+      "ask_sum": 1.98,
+      "opportunity": null,
+      "min_spread": 98.0
+    },
+    {
+      "slug": "will-the-denver-broncos-win-super-bowl-2026",
+      "volume": 3580377.699114,
+      "outcomes": [
+        "Yes",
+        "No"
+      ],
+      "prices": [
+        {
+          "outcome": "Yes",
+          "bid": 0.001,
+          "ask": 0.999
+        },
+        {
+          "outcome": "No",
+          "bid": 0.001,
+          "ask": 0.999
+        }
+      ],
+      "spreads": [
+        99.8,
+        99.8
+      ],
+      "ask_sum": 1.998,
+      "opportunity": null,
+      "min_spread": 99.8
+    },
+    {
+      "slug": "will-the-baltimore-ravens-win-super-bowl-2026",
+      "volume": 3359927.158352,
+      "outcomes": [
+        "Yes",
+        "No"
+      ],
+      "prices": [
+        {
+          "outcome": "Yes",
+          "bid": 0.001,
+          "ask": 0.999
+        },
+        {
+          "outcome": "No",
+          "bid": 0.001,
+          "ask": 0.999
+        }
+      ],
+      "spreads": [
+        99.8,
+        99.8
+      ],
+      "ask_sum": 1.998,
+      "opportunity": null,
+      "min_spread": 99.8
+    },
+    {
+      "slug": "will-the-green-bay-packers-win-super-bowl-2026",
+      "volume": 3319247.91056,
+      "outcomes": [
+        "Yes",
+        "No"
+      ],
+      "prices": [
+        {
+          "outcome": "Yes",
+          "bid": 0.001,
+          "ask": 0.999
+        },
+        {
+          "outcome": "No",
+          "bid": 0.001,
+          "ask": 0.999
+        }
+      ],
+      "spreads": [
+        99.8,
+        99.8
+      ],
+      "ask_sum": 1.998,
+      "opportunity": null,
+      "min_spread": 99.8
+    },
+    {
+      "slug": "will-the-los-angeles-chargers-win-super-bowl-2026",
+      "volume": 3302420.703613,
+      "outcomes": [
+        "Yes",
+        "No"
+      ],
+      "prices": [
+        {
+          "outcome": "Yes",
+          "bid": 0.001,
+          "ask": 0.999
+        },
+        {
+          "outcome": "No",
+          "bid": 0.001,
+          "ask": 0.999
+        }
+      ],
+      "spreads": [
+        99.8,
+        99.8
+      ],
+      "ask_sum": 1.998,
+      "opportunity": null,
+      "min_spread": 99.8
+    },
+    {
+      "slug": "will-the-philadelphia-eagles-win-super-bowl-2026",
+      "volume": 2867420.04652,
+      "outcomes": [
+        "Yes",
+        "No"
+      ],
+      "prices": [
+        {
+          "outcome": "Yes",
+          "bid": 0.01,
+          "ask": 0.99
+        },
+        {
+          "outcome": "No",
+          "bid": 0.01,
+          "ask": 0.99
+        }
+      ],
+      "spreads": [
+        98.0,
+        98.0
+      ],
+      "ask_sum": 1.98,
+      "opportunity": null,
+      "min_spread": 98.0
+    },
+    {
+      "slug": "will-bitcoin-hit-1m-before-gta-vi-872",
+      "volume": 2471406.597052,
+      "outcomes": [
+        "Yes",
+        "No"
+      ],
+      "prices": [
+        {
+          "outcome": "Yes",
+          "bid": 0.01,
+          "ask": 0.99
+        },
+        {
+          "outcome": "No",
+          "bid": 0.01,
+          "ask": 0.99
+        }
+      ],
+      "spreads": [
+        98.0,
+        98.0
+      ],
+      "ask_sum": 1.98,
+      "opportunity": null,
+      "min_spread": 98.0
+    },
+    {
+      "slug": "will-2025-be-the-hottest-year-on-record",
+      "volume": 2066659.013822,
+      "outcomes": [
+        "Yes",
+        "No"
+      ],
+      "prices": [
+        {
+          "outcome": "Yes",
+          "bid": 0.001,
+          "ask": 0.999
+        },
+        {
+          "outcome": "No",
+          "bid": 0.001,
+          "ask": 0.999
+        }
+      ],
+      "spreads": [
+        99.8,
+        99.8
+      ],
+      "ask_sum": 1.998,
+      "opportunity": null,
+      "min_spread": 99.8
+    },
+    {
+      "slug": "will-trump-deport-250000-500000-people",
+      "volume": 1014058.380599,
+      "outcomes": [
+        "Yes",
+        "No"
+      ],
+      "prices": [
+        {
+          "outcome": "Yes",
+          "bid": 0.001,
+          "ask": 0.999
+        },
+        {
+          "outcome": "No",
+          "bid": 0.001,
+          "ask": 0.999
+        }
+      ],
+      "spreads": [
+        99.8,
+        99.8
+      ],
+      "ask_sum": 1.998,
+      "opportunity": null,
+      "min_spread": 99.8
+    },
+    {
+      "slug": "will-tariffs-generate-250b-in-2025",
+      "volume": 1013986.008866,
+      "outcomes": [
+        "Yes",
+        "No"
+      ],
+      "prices": [
+        {
+          "outcome": "Yes",
+          "bid": 0.001,
+          "ask": 0.999
+        },
+        {
+          "outcome": "No",
+          "bid": 0.001,
+          "ask": 0.999
+        }
+      ],
+      "spreads": [
+        99.8,
+        99.8
+      ],
+      "ask_sum": 1.998,
+      "opportunity": null,
+      "min_spread": 99.8
+    },
+    {
+      "slug": "will-china-invades-taiwan-before-gta-vi-716",
+      "volume": 925840.23422,
+      "outcomes": [
+        "Yes",
+        "No"
+      ],
+      "prices": [
+        {
+          "outcome": "Yes",
+          "bid": 0.01,
+          "ask": 0.99
+        },
+        {
+          "outcome": "No",
+          "bid": 0.01,
+          "ask": 0.99
+        }
+      ],
+      "spreads": [
+        98.0,
+        98.0
+      ],
+      "ask_sum": 1.98,
+      "opportunity": null,
+      "min_spread": 98.0
+    },
+    {
+      "slug": "will-trump-deport-less-than-250000",
+      "volume": 913830.30048,
+      "outcomes": [
+        "Yes",
+        "No"
+      ],
+      "prices": [
+        {
+          "outcome": "Yes",
+          "bid": 0.001,
+          "ask": 0.999
+        },
+        {
+          "outcome": "No",
+          "bid": 0.001,
+          "ask": 0.999
+        }
+      ],
+      "spreads": [
+        99.8,
+        99.8
+      ],
+      "ask_sum": 1.998,
+      "opportunity": null,
+      "min_spread": 99.8
+    }
+  ]
+}

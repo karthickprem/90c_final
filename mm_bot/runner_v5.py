@@ -49,6 +49,9 @@ class BotState(Enum):
 # SAFE DEFAULTS for $15-20 account
 # Use 5.0 to fit within $2.50 budget at 50c price (5 × $0.50 = $2.50)
 MIN_SHARES = 5.0
+# V9 FIX: Post MIN_SHARES + 0.5 to avoid dust from partial fills
+# Note: Can't use +1 on small accounts (would exceed max_usdc_locked)
+MIN_QUOTE_SHARES = 5.5  # Small buffer to ensure remaining > MIN_SHARES
 SHARE_STEP = 0.01
 MIN_NOTIONAL_USD = 1.0
 
@@ -73,6 +76,12 @@ EXIT_FLATTEN_SECS = 40.0  # After 40s, cross spread to flatten
 # Endgame
 ENTRY_CUTOFF_SECS = 180
 FLATTEN_DEADLINE_SECS = 120
+
+# STALE ORDER REFRESH (V8)
+STALE_DRIFT_CENTS = 5       # Cancel if order is 5c+ from current mid
+STALE_TTL_SECS = 20         # Cancel if order sits for 20s without fill
+CHASE_BLOCK_10S_CENTS = 8   # Don't repost if market moved 8c+ in last 10s
+REPOST_COOLDOWN_SECS = 5    # 5s cooldown after stale cancel (prevents pyramiding)
 
 
 @dataclass
@@ -172,17 +181,34 @@ class SafeRunnerV5:
         self.rest_no_shares = 0.0
         self.has_inventory = False
         
+        # P0 FIX V9: Close debounce - don't close on single zero read
+        self._yes_zero_count = 0  # Consecutive zero polls for YES
+        self._no_zero_count = 0   # Consecutive zero polls for NO
+        self._ZERO_DEBOUNCE = 3   # Require 3 consecutive zeros before closing
+        self._inventory_latched_yes = False  # Once we have inventory, stay latched
+        self._inventory_latched_no = False
+        
         # P0 FIX 2: Exit state per token (only ONE exit order allowed)
         self.exit_states: Dict[str, ExitState] = {}
+        
+        # V8 FIX: Track last exit attempt time to prevent spam on BALANCE_ERROR
+        self._last_exit_attempt: Dict[str, float] = {}
+        self._exit_retry_cooldown_s = 3.0  # Wait 3s between exit attempts after failure
         
         # P0 FIX: Pending entry tracking (don't place more while order exists)
         self.pending_entry_token: Optional[str] = None
         self.pending_entry_order_id: Optional[str] = None
+        self.pending_entry_price: float = 0.0        # V8: Track entry price for stale detection
+        self.pending_entry_posted_at: float = 0.0    # V8: Track when entry was posted
         
         # P0 FIX V6: Track ALL entry orders + cooldown to prevent pyramiding
         self.all_entry_order_ids: Set[str] = set()  # ALL posted entry orders
         self.last_entry_posted_at: float = 0.0       # Cooldown: no entries for N seconds after post
         self.ENTRY_COOLDOWN_SECS = 15.0             # LONGER cooldown: 15s to wait for fill/cancel
+        
+        # V8: Stale order management
+        self.last_stale_cancel_at: float = 0.0      # Cooldown after stale cancel
+        self.chase_blocked_until: float = 0.0        # Don't repost until this time (trend protection)
         
         # P1: Rolling mid for regime filter (5s = 50 ticks at 100ms)
         self.mid_history: deque = deque(maxlen=50)
@@ -238,6 +264,58 @@ class SafeRunnerV5:
             self.lock_file.unlink()
             self._acquired_lock = False
     
+    def _window_start_cleanup(self):
+        """
+        V9 FIX: Cancel ALL open orders at window start.
+        This prevents leftover orders from prior windows filling unexpectedly.
+        Also reset debounce counters for clean state.
+        """
+        # Reset debounce counters for clean state
+        self._yes_zero_count = 0
+        self._no_zero_count = 0
+        
+        print("[CLEANUP] Window start - cancelling all open orders...", flush=True)
+        try:
+            open_orders = self.clob.get_open_orders()
+            if not open_orders:
+                print("[CLEANUP] No open orders found", flush=True)
+                return
+            
+            cancelled = 0
+            for order in open_orders:
+                try:
+                    self.clob.cancel_order(order.order_id)
+                    cancelled += 1
+                except Exception as e:
+                    print(f"[CLEANUP] Failed to cancel {order.order_id[:8]}...: {e}", flush=True)
+            
+            if cancelled > 0:
+                print(f"[CLEANUP] Cancelled {cancelled} orders", flush=True)
+                time.sleep(0.5)  # Wait for cancels to process
+            
+            # Confirm all cancelled
+            remaining = self.clob.get_open_orders()
+            if remaining:
+                print(f"[CLEANUP] WARNING: {len(remaining)} orders still open after cleanup", flush=True)
+                # Try cancel_all as fallback
+                try:
+                    self.clob.cancel_all()
+                    time.sleep(0.5)
+                except:
+                    pass
+            else:
+                print("[CLEANUP] Confirmed: 0 open orders", flush=True)
+                
+        except Exception as e:
+            print(f"[CLEANUP] Error during cleanup: {e}", flush=True)
+            # Fallback: try cancel_all
+            try:
+                self.clob.cancel_all()
+                print("[CLEANUP] Used cancel_all fallback", flush=True)
+                time.sleep(0.5)
+            except:
+                pass
+    
     @property
     def seconds_to_settlement(self) -> int:
         return max(0, self.market_end_time - int(time.time()))
@@ -262,7 +340,9 @@ class SafeRunnerV5:
     def _reconcile_positions(self) -> bool:
         """
         Fetch REST positions. Returns True if changed.
-        This is the SOURCE OF TRUTH for inventory.
+        
+        V9 FIX: Debounce close - don't close on single zero read.
+        Require ZERO_DEBOUNCE consecutive zeros AND no open exit orders.
         """
         try:
             import requests
@@ -280,57 +360,81 @@ class SafeRunnerV5:
             old_yes = self.rest_yes_shares
             old_no = self.rest_no_shares
             
-            self.rest_yes_shares = 0.0
-            self.rest_no_shares = 0.0
+            # Read current REST values
+            rest_yes = 0.0
+            rest_no = 0.0
+            avg_price_yes = 0.0
+            avg_price_no = 0.0
             
             for p in positions:
                 token = p.get("asset", "")
                 shares = float(p.get("size", 0))
-                # Try multiple field names for avg price
                 avg_price = float(p.get("avgPrice", 0) or p.get("avg_price", 0) or p.get("averagePrice", 0))
                 
                 if token == self.yes_token:
-                    self.rest_yes_shares = shares
-                    if shares > 0 and self.yes_token not in self.exit_states:
-                        # V6 FIX: If avg_price is 0, estimate from current book
-                        if avg_price < 0.01:
-                            book = self._get_book(self.yes_token)
-                            avg_price = book.get("best_bid", 0.5)
-                            print(f"[RECONCILE] avgPrice missing, using book: {avg_price:.4f}", flush=True)
-                        self._create_exit_state(self.yes_token, shares, avg_price)
+                    rest_yes = shares
+                    avg_price_yes = avg_price
                 elif token == self.no_token:
-                    self.rest_no_shares = shares
-                    if shares > 0 and self.no_token not in self.exit_states:
-                        # V6 FIX: If avg_price is 0, estimate from current book
-                        if avg_price < 0.01:
-                            book = self._get_book(self.no_token)
-                            avg_price = book.get("best_bid", 0.5)
-                            print(f"[RECONCILE] avgPrice missing, using book: {avg_price:.4f}", flush=True)
-                        self._create_exit_state(self.no_token, shares, avg_price)
+                    rest_no = shares
+                    avg_price_no = avg_price
             
-            # Update inventory flag
-            self.has_inventory = (self.rest_yes_shares > 0.01 or self.rest_no_shares > 0.01)
+            # V10 FIX: Reconcile is SANITY ONLY, not source of position changes.
+            # Position open/close comes from confirmed fills in _poll_and_process_fills.
+            # Here we just update rest_shares for sanity checking.
             
-            # Log changes
-            if abs(old_yes - self.rest_yes_shares) > 0.01 or abs(old_no - self.rest_no_shares) > 0.01:
-                print(f"[RECONCILE] YES={self.rest_yes_shares:.2f} NO={self.rest_no_shares:.2f}", flush=True)
-                
-                # Check if position closed
-                if old_yes > 0.01 and self.rest_yes_shares < 0.01:
-                    self._on_position_closed(self.yes_token, old_yes)
-                if old_no > 0.01 and self.rest_no_shares < 0.01:
-                    self._on_position_closed(self.no_token, old_no)
-                
-                return True
+            # YES: Track REST value with debounce
+            if rest_yes > 0.01:
+                self._yes_zero_count = 0  # Reset on any non-zero
+                self.rest_yes_shares = rest_yes
+                # Note: Do NOT create exit state from reconcile - wait for confirmed fill
+            else:
+                # Got zero - only log if we think we have inventory
+                if self._inventory_latched_yes:
+                    self._yes_zero_count += 1
+                    if self._yes_zero_count <= self._ZERO_DEBOUNCE:
+                        # Still in debounce window - log but keep old value
+                        print(f"[DEBOUNCE] YES zero read (count={self._yes_zero_count}/{self._ZERO_DEBOUNCE})", flush=True)
+                    elif self._yes_zero_count == self._ZERO_DEBOUNCE + 1:
+                        # Threshold reached - log sanity warning but do NOT close position
+                        # Position close ONLY happens from confirmed exit fill
+                        print(f"[SANITY] YES REST=0 after debounce, waiting for exit fill confirmation", flush=True)
+                    # Don't keep incrementing - cap at threshold + 1
+                    self._yes_zero_count = min(self._yes_zero_count, self._ZERO_DEBOUNCE + 1)
             
-            return False
+            # NO: Track REST value with debounce
+            if rest_no > 0.01:
+                self._no_zero_count = 0  # Reset on any non-zero
+                self.rest_no_shares = rest_no
+            else:
+                if self._inventory_latched_no:
+                    self._no_zero_count += 1
+                    if self._no_zero_count <= self._ZERO_DEBOUNCE:
+                        print(f"[DEBOUNCE] NO zero read (count={self._no_zero_count}/{self._ZERO_DEBOUNCE})", flush=True)
+                    elif self._no_zero_count == self._ZERO_DEBOUNCE + 1:
+                        print(f"[SANITY] NO REST=0 after debounce, waiting for exit fill confirmation", flush=True)
+                    self._no_zero_count = min(self._no_zero_count, self._ZERO_DEBOUNCE + 1)
+            
+            # V10 FIX: has_inventory is based on exit_states (from confirmed fills)
+            # Not from REST positions (which can flap)
+            self.has_inventory = bool(self.exit_states)
+            
+            # Log REST values for sanity (but don't act on changes)
+            if abs(old_yes - rest_yes) > 0.01 or abs(old_no - rest_no) > 0.01:
+                print(f"[RECONCILE-SANITY] REST: YES={rest_yes:.2f} NO={rest_no:.2f}", flush=True)
+            
+            return False  # Reconcile never triggers state changes now
         
         except Exception as e:
             print(f"[RECONCILE] Error: {e}", flush=True)
             return False
     
-    def _create_exit_state(self, token_id: str, shares: float, avg_price: float):
-        """Create exit state for a new position"""
+    def _create_exit_state(self, token_id: str, shares: float, avg_price: float, from_fill: bool = False):
+        """
+        Create exit state for a new position.
+        
+        V10 FIX: Only create if from_fill=True (confirmed fill from trades API).
+        Reconcile-based synthetic entries are REMOVED.
+        """
         self.exit_states[token_id] = ExitState(
             token_id=token_id,
             shares=shares,
@@ -338,10 +442,8 @@ class SafeRunnerV5:
             entry_time=time.time()
         )
         
-        # Create synthetic entry in fill tracker
-        self.fill_tracker.create_synthetic_entry(token_id, shares, avg_price)
-        
-        print(f"[POSITION] New: {token_id[:20]}... {shares:.2f} @ {avg_price:.4f}", flush=True)
+        source = "FILL" if from_fill else "RECONCILE"
+        print(f"[POSITION] New: {token_id[:20]}... {shares:.2f} @ {avg_price:.4f} (from {source})", flush=True)
     
     def _on_position_closed(self, token_id: str, old_shares: float):
         """Handle position fully closed"""
@@ -415,18 +517,259 @@ class SafeRunnerV5:
         """
         Check if we're in the entry cooldown period.
         Returns True if we CAN place an entry (cooldown passed).
+        
+        V8: Use shorter cooldown after stale cancel to allow quick repost.
         """
         if self.last_entry_posted_at == 0:
             return True
         
-        elapsed = time.time() - self.last_entry_posted_at
+        now = time.time()
+        elapsed = now - self.last_entry_posted_at
+        
+        # V8: If we just did a stale cancel, use shorter cooldown
+        if self.last_stale_cancel_at > 0 and (now - self.last_stale_cancel_at) < 5.0:
+            # Recent stale cancel - use repost cooldown
+            if elapsed < REPOST_COOLDOWN_SECS:
+                return False
+            return True
+        
+        # Normal cooldown
         if elapsed < self.ENTRY_COOLDOWN_SECS:
-            # Log occasionally to reduce spam
             if self.metrics.ticks % 40 == 0:
                 remaining = self.ENTRY_COOLDOWN_SECS - elapsed
                 print(f"[COOLDOWN] {remaining:.0f}s remaining", flush=True)
             return False
         return True
+    
+    # ========================================================================
+    # V8: STALE ORDER MANAGEMENT
+    # ========================================================================
+    
+    def _get_10s_directional_move(self) -> float:
+        """
+        Calculate directional price movement over last 10s (~25 ticks).
+        Returns signed move in cents (positive = up, negative = down).
+        """
+        if len(self.mid_history) < 25:
+            return 0.0
+        
+        mids = list(self.mid_history)
+        old_mid = mids[-25] if len(mids) >= 25 else mids[0]
+        new_mid = mids[-1]
+        return (new_mid - old_mid) * 100
+    
+    def _check_stale_entry(self, yes_mid: float, no_mid: float) -> Optional[str]:
+        """
+        Check if pending entry order is stale and should be cancelled.
+        Returns reason string if stale, None if still valid.
+        """
+        if not self.pending_entry_order_id:
+            return None
+        
+        now = time.time()
+        
+        # Trigger 1: Endgame or extreme odds
+        if self.seconds_to_settlement < ENTRY_CUTOFF_SECS:
+            return "endgame"
+        
+        if yes_mid < 0.10 or yes_mid > 0.90:
+            return "extreme"
+        
+        # Trigger 2: Price drift too far
+        # FIX: Use the mid of the token we're trading, not always yes_mid
+        if self.pending_entry_token == self.yes_token:
+            current_mid = yes_mid
+        else:
+            current_mid = no_mid
+        
+        drift_cents = abs(current_mid - self.pending_entry_price) * 100
+        if drift_cents >= STALE_DRIFT_CENTS:
+            return f"drift({drift_cents:.1f}c)"
+        
+        # Trigger 3: TTL expired
+        order_age = now - self.pending_entry_posted_at
+        if order_age >= STALE_TTL_SECS:
+            return f"ttl({order_age:.0f}s)"
+        
+        return None
+    
+    def _is_chase_blocked(self) -> bool:
+        """
+        Check if we're in a trending market (should not chase).
+        Returns True if reposting should be blocked.
+        """
+        # Check if still in cooldown from previous chase block
+        if time.time() < self.chase_blocked_until:
+            return True
+        
+        # Check 10s directional move
+        move_cents = abs(self._get_10s_directional_move())
+        if move_cents >= CHASE_BLOCK_10S_CENTS:
+            # Block for 5 seconds
+            self.chase_blocked_until = time.time() + 5.0
+            print(f"[CHASE_BLOCK] Market moved {move_cents:.1f}c in 10s, blocking repost", flush=True)
+            return True
+        
+        return False
+    
+    # ========================================================================
+    # V10 FIX: FILL-BASED POSITION TRACKING (SOURCE OF TRUTH)
+    # ========================================================================
+    
+    def _poll_and_process_fills(self):
+        """
+        V10 FIX: Poll trades API for actual fills.
+        This is the SOURCE OF TRUTH for position changes.
+        Reconcile is sanity-only.
+        """
+        market_tokens = {self.yes_token, self.no_token}
+        new_fills = self.fill_tracker.poll_fills(market_tokens)
+        
+        for fill in new_fills:
+            self._process_confirmed_fill(fill)
+    
+    def _process_confirmed_fill(self, fill):
+        """
+        Process a confirmed fill from trades API.
+        
+        BUY fill = entry (we bought shares)
+        SELL fill = exit (we sold shares)
+        """
+        token_id = fill.token_id
+        side = fill.side.upper()
+        size = fill.size
+        price = fill.price
+        is_maker = fill.is_maker
+        trade_id = fill.trade_id[:12] if fill.trade_id else "unknown"
+        
+        label = "YES" if token_id == self.yes_token else "NO"
+        maker_str = "MAKER" if is_maker else "TAKER"
+        
+        if side == "BUY":
+            # Entry fill
+            print(f"[FILL] ENTRY {label}: {size:.2f} @ {price:.4f} ({maker_str}) trade_id={trade_id}", flush=True)
+            
+            # Create/update exit state from confirmed fill
+            if token_id not in self.exit_states:
+                self._create_exit_state(token_id, size, price, from_fill=True)
+            else:
+                # Add to existing position
+                state = self.exit_states[token_id]
+                old_shares = state.shares
+                new_shares = old_shares + size
+                # Weighted avg price
+                state.entry_price = (state.entry_price * old_shares + price * size) / new_shares
+                state.shares = new_shares
+                print(f"[POSITION] Updated: {label} now {new_shares:.2f} @ {state.entry_price:.4f}", flush=True)
+            
+            # Cancel other side's entries (inventory rule)
+            other_token = self.no_token if token_id == self.yes_token else self.yes_token
+            self._cancel_other_side_on_fill(token_id)
+            
+            # Clear pending entry tracking
+            if self.pending_entry_token == token_id:
+                self.pending_entry_order_id = None
+                self.pending_entry_token = None
+            
+        elif side == "SELL":
+            # Exit fill
+            state = self.exit_states.get(token_id)
+            if state:
+                entry_price = state.entry_price
+                pnl = (price - entry_price) * size
+                pnl_str = f"+${pnl:.2f}" if pnl >= 0 else f"-${abs(pnl):.2f}"
+                
+                print(f"[FILL] EXIT {label}: {size:.2f} @ {price:.4f} ({maker_str}) trade_id={trade_id}", flush=True)
+                print(f"[ROUND-TRIP] Entry={entry_price:.4f} Exit={price:.4f} Size={size:.2f} PnL={pnl_str} (from fills, not cash delta)", flush=True)
+                
+                # Update position
+                state.shares -= size
+                if state.shares < 0.01:
+                    # Position fully closed
+                    self._on_position_closed_from_fill(token_id, entry_price, price, size)
+            else:
+                print(f"[FILL] EXIT {label}: {size:.2f} @ {price:.4f} ({maker_str}) trade_id={trade_id} - NO MATCHING ENTRY", flush=True)
+    
+    def _on_position_closed_from_fill(self, token_id: str, entry_price: float, exit_price: float, size: float):
+        """
+        Handle position close from confirmed exit fill.
+        This is the CORRECT way to close a position.
+        """
+        label = "YES" if token_id == self.yes_token else "NO"
+        pnl = (exit_price - entry_price) * size
+        pnl_str = f"+${pnl:.2f}" if pnl >= 0 else f"-${abs(pnl):.2f}"
+        
+        state = self.exit_states.get(token_id)
+        hold_time = time.time() - state.entry_time if state else 0
+        
+        print(f"[POSITION] Closed {label}: held {hold_time:.1f}s, realized PnL={pnl_str}", flush=True)
+        
+        # Clean up state
+        if token_id in self.exit_states:
+            del self.exit_states[token_id]
+        
+        # Reset inventory latch
+        if token_id == self.yes_token:
+            self._inventory_latched_yes = False
+            self._yes_zero_count = 0
+        else:
+            self._inventory_latched_no = False
+            self._no_zero_count = 0
+        
+        # Update metrics
+        if pnl >= 0:
+            self.metrics.wins += 1
+        else:
+            self.metrics.losses += 1
+    
+    def _manage_stale_entry(self, yes_mid: float, no_mid: float):
+        """
+        Check and handle stale entry orders.
+        Cancel if stale, optionally repost if conditions are safe.
+        """
+        stale_reason = self._check_stale_entry(yes_mid, no_mid)
+        if not stale_reason:
+            return  # Order still valid
+        
+        # Cancel the stale order
+        order_id = self.pending_entry_order_id
+        try:
+            self.clob.cancel_order(order_id)
+            print(f"[ENTRY_STALE_CANCEL] reason={stale_reason}", flush=True)
+        except:
+            pass
+        
+        # Clear tracking
+        if order_id in self.all_entry_order_ids:
+            self.all_entry_order_ids.discard(order_id)
+        self.pending_entry_order_id = None
+        self.pending_entry_token = None
+        self.pending_entry_price = 0
+        self.pending_entry_posted_at = 0
+        self.last_stale_cancel_at = time.time()
+        
+        # Decide whether to repost
+        if stale_reason in ("endgame", "extreme"):
+            # Don't repost in these cases
+            return
+        
+        # Check repost cooldown
+        if time.time() - self.last_stale_cancel_at < REPOST_COOLDOWN_SECS:
+            return
+        
+        # Check chase block
+        if self._is_chase_blocked():
+            return
+        
+        # Check regime filter
+        can_enter, reason = self._check_regime(yes_mid, no_mid)
+        if not can_enter:
+            print(f"[ENTRY_REPOST_BLOCKED] regime={reason}", flush=True)
+            return
+        
+        # Regime valid, repost allowed
+        # The normal entry logic will handle posting on next tick
+        print(f"[ENTRY_REPOST_ALLOWED] Will repost on next tick", flush=True)
     
     # ========================================================================
     # P0 FIX 2: EXIT REPLACE = CANCEL-CONFIRM-POST
@@ -473,41 +816,66 @@ class SafeRunnerV5:
         Post exit order with safety checks.
         
         V6 FIX: Always cancel any existing exit first, then refresh shares.
+        V8 FIX: Cancel ALL orders for this token to prevent BALANCE_ERROR from orphaned orders.
+        V9 FIX: Add invariant logging + assertions for correct side/token.
+        V10 FIX: Use shares from exit_state (confirmed fills) not REST.
         """
+        # Get exit state first - this is source of truth from fills
         state = self.exit_states.get(token_id)
         if not state:
             return False
         
-        # V6 FIX: If there's already an exit order, cancel it first
-        if state.exit_order_id:
-            print(f"[EXIT] Cancelling existing exit before new post...", flush=True)
-            if not self._cancel_confirm_exit(token_id):
-                # Couldn't cancel - don't post another
-                return False
+        # V10: Use shares from exit_state (confirmed fills)
+        shares = state.shares
         
-        # V6 FIX: Refresh positions after cancel to get accurate shares
-        self._reconcile_positions()
+        # Determine token label for logging
+        is_yes_token = (token_id == self.yes_token)
+        token_label = "YES" if is_yes_token else "NO"
         
-        # Get actual shares from REST (now fresh)
-        rest_shares = self.rest_yes_shares if token_id == self.yes_token else self.rest_no_shares
-        
-        # P0 FIX 3: DUST CHECK (only log once per position)
-        if rest_shares < MIN_SHARES:
-            if rest_shares > 0:
+        # DUST CHECK FIRST (before any operations)
+        if shares < MIN_SHARES:
+            if shares > 0:
                 dust_key = f"dust_{token_id}"
                 if not hasattr(self, '_dust_logged') or dust_key not in self._dust_logged:
                     if not hasattr(self, '_dust_logged'):
                         self._dust_logged = set()
                     self._dust_logged.add(dust_key)
-                    print(f"[DUST] {token_id[:20]}... has {rest_shares:.2f} < {MIN_SHARES} min, holding to settlement", flush=True)
+                    print(f"[DUST] {token_label} has {shares:.2f} < {MIN_SHARES} min, holding to settlement", flush=True)
             return False
         
-        # Floor to step
-        sell_size = int(rest_shares / SHARE_STEP) * SHARE_STEP
+        # V10: Log exit intent with full context BEFORE placing
+        print(f"[EXIT-INVARIANT] token={token_label} side=SELL size={shares:.2f} price={price:.4f}", flush=True)
+        
+        # V8 FIX: Cancel ALL open SELL orders for this token to prevent BALANCE_ERROR
+        try:
+            open_orders = self.clob.get_open_orders()
+            cancelled_count = 0
+            for order in open_orders:
+                order_token = getattr(order, 'asset', None) or getattr(order, 'token_id', None)
+                order_side = getattr(order, 'side', None)
+                if order_token == token_id and order_side == "SELL":
+                    try:
+                        self.clob.cancel_order(order.order_id)
+                        cancelled_count += 1
+                    except:
+                        pass
+            if cancelled_count > 0:
+                print(f"[EXIT] Cancelled {cancelled_count} existing SELL orders", flush=True)
+                time.sleep(0.5)  # Wait for cancels to process
+        except Exception as e:
+            print(f"[EXIT] Error checking orders: {e}", flush=True)
+        
+        # Clear tracked exit order since we cancelled
+        state.exit_order_id = None
+        state.exit_price = 0
+        
+        # V10: Use shares from exit_state (confirmed fills), not REST
+        sell_size = int(shares / SHARE_STEP) * SHARE_STEP
+        sell_size = min(sell_size, shares)
         
         # Invariant: never sell more than we have
-        if sell_size > rest_shares:
-            print(f"[EXIT] INVARIANT FAIL: sell_size={sell_size:.2f} > rest_shares={rest_shares:.2f}", flush=True)
+        if sell_size > shares:
+            print(f"[EXIT] INVARIANT FAIL: sell_size={sell_size:.2f} > shares={shares:.2f}", flush=True)
             return False
         
         try:
@@ -524,6 +892,8 @@ class SafeRunnerV5:
                 state.exit_price = price
                 state.exit_posted_at = time.time()
                 self.metrics.exits_posted += 1
+                # Clear cooldown on success
+                self._last_exit_attempt.pop(token_id, None)
                 
                 phase_str = state.phase
                 print(f"[EXIT] Posted ({phase_str}): {sell_size:.2f} @ {price:.4f}", flush=True)
@@ -533,13 +903,9 @@ class SafeRunnerV5:
                     error_str = str(result.error).lower()
                     if "balance" in error_str or "allowance" in error_str:
                         self.metrics.balance_errors += 1
-                        # V6 FIX: On balance error, try smaller size
-                        if sell_size > MIN_SHARES:
-                            smaller_size = sell_size - MIN_SHARES
-                            if smaller_size >= MIN_SHARES:
-                                print(f"[EXIT] Retrying with smaller size: {smaller_size:.2f}", flush=True)
-                                return self._post_exit_order_raw(token_id, price, smaller_size, post_only, state)
-                        print(f"[EXIT] BALANCE_ERROR: size={sell_size:.2f} price={price:.4f} rest_shares={rest_shares:.2f}", flush=True)
+                        # V8 FIX: Set cooldown to prevent spam
+                        self._last_exit_attempt[token_id] = time.time()
+                        print(f"[EXIT] BALANCE_ERROR: size={sell_size:.2f} price={price:.4f} (retry in {self._exit_retry_cooldown_s}s)", flush=True)
                     else:
                         print(f"[EXIT] Failed: {result.error}", flush=True)
         
@@ -582,18 +948,27 @@ class SafeRunnerV5:
         Phase 1 (TP): Post exit at entry + TP_CENTS (maker)
         Phase 2 (SCRATCH): After 20s, reprice to entry (scratch)
         Phase 3 (FLATTEN): After 40s, cross spread to flatten (taker if enabled)
+        
+        V10 FIX: Use shares from exit_state (confirmed fills) not REST.
         """
         state = self.exit_states.get(token_id)
         if not state:
             return
         
-        rest_shares = self.rest_yes_shares if token_id == self.yes_token else self.rest_no_shares
-        if rest_shares < 0.01:
-            # Position closed
+        # V10: Use shares from exit_state (source of truth from fills)
+        shares = state.shares
+        if shares < 0.01:
+            # Position closed (from fill)
             return
         
-        # Update shares in case of partial fill
-        state.shares = rest_shares
+        # V8 FIX: Cooldown after failed exit attempt to prevent BALANCE_ERROR spam
+        last_attempt = self._last_exit_attempt.get(token_id, 0)
+        if time.time() - last_attempt < self._exit_retry_cooldown_s:
+            return  # Still in cooldown, don't spam
+        
+        # Early dust check - don't try to manage exit for dust positions
+        if shares < MIN_SHARES:
+            return
         
         best_bid = book["best_bid"]
         best_ask = book["best_ask"]
@@ -718,7 +1093,7 @@ class SafeRunnerV5:
     def _place_opening_entry(self, token_id: str, book: dict, label: str) -> Optional[str]:
         """Place a single opening mode entry"""
         desired_bid = book["best_bid"]
-        quote_size = MIN_SHARES  # Always use min size in opening
+        quote_size = MIN_QUOTE_SHARES  # Use slightly more than min to avoid dust from partial fills
         
         cost = quote_size * desired_bid
         if cost > self.config.risk.max_usdc_locked:
@@ -740,7 +1115,11 @@ class SafeRunnerV5:
             if result.success and result.order_id:
                 # V6: Track order and set cooldown
                 self.all_entry_order_ids.add(result.order_id)
-                self.last_entry_posted_at = time.time()  # START COOLDOWN
+                self.pending_entry_order_id = result.order_id    # V8: Track for stale detection
+                self.pending_entry_token = token_id              # V8
+                self.pending_entry_price = desired_bid           # V8
+                self.pending_entry_posted_at = time.time()       # V8
+                self.last_entry_posted_at = time.time()          # START COOLDOWN
                 self.metrics.entries_posted += 1
                 self.opening_entries_posted += 1
                 print(f"[OPENING] Posted {label} BID {quote_size} @ {desired_bid:.4f}", flush=True)
@@ -859,14 +1238,14 @@ class SafeRunnerV5:
             label = "NO"
         
         desired_bid = book["best_bid"]
-        quote_size = max(MIN_SHARES, self.config.quoting.base_quote_size)
+        quote_size = max(MIN_QUOTE_SHARES, self.config.quoting.base_quote_size)
         
         cost = quote_size * desired_bid
         if cost > self.config.risk.max_usdc_locked:
             quote_size = int(self.config.risk.max_usdc_locked / desired_bid)
-            if quote_size < MIN_SHARES:
+            if quote_size < MIN_QUOTE_SHARES:
                 if self.metrics.ticks % 20 == 0:
-                    print(f"[NORMAL] Blocked: SIZE too small after cap (need {MIN_SHARES}, got {quote_size} at ${desired_bid:.2f})", flush=True)
+                    print(f"[NORMAL] Blocked: SIZE too small after cap (need {MIN_QUOTE_SHARES}, got {quote_size} at ${desired_bid:.2f})", flush=True)
                 return False
         
         if not self.live:
@@ -887,7 +1266,9 @@ class SafeRunnerV5:
                 self.all_entry_order_ids.add(result.order_id)
                 self.pending_entry_order_id = result.order_id
                 self.pending_entry_token = token_id
-                self.last_entry_posted_at = time.time()  # START COOLDOWN
+                self.pending_entry_price = desired_bid      # V8: Track price for stale detection
+                self.pending_entry_posted_at = time.time()  # V8: Track when posted
+                self.last_entry_posted_at = time.time()     # START COOLDOWN
                 self.metrics.entries_posted += 1
                 print(f"[NORMAL] Posted {label} BID {quote_size} @ {desired_bid:.4f}", flush=True)
                 return True
@@ -922,11 +1303,20 @@ class SafeRunnerV5:
         
         # Update mid history (for volatility calculation)
         yes_mid = (yes_book["best_bid"] + yes_book["best_ask"]) / 2
+        no_mid = (no_book["best_bid"] + no_book["best_ask"]) / 2
         self.mid_history.append(yes_mid)
         
+        # V10 FIX: Poll for actual fills from trades API (SOURCE OF TRUTH)
+        self._poll_and_process_fills()
+        
+        # V8: Check for stale entry orders and manage them
+        if self.pending_entry_order_id:
+            self._manage_stale_entry(yes_mid, no_mid)
+        
         # Reconcile - FAST when holding inventory (500ms), normal otherwise (2s)
+        # V10: Reconcile is now SANITY ONLY, not source of position changes
         now = time.time()
-        has_orders = (self.all_entry_order_ids or  # V6: Check all tracked orders
+        has_orders = (self.all_entry_order_ids or
                       self.pending_entry_order_id or 
                       self.opening_yes_order_id or 
                       self.opening_no_order_id or 
@@ -934,20 +1324,8 @@ class SafeRunnerV5:
         reconcile_interval = self.reconcile_fast_s if has_orders else self.reconcile_interval_s
         
         if now - self.last_reconcile >= reconcile_interval:
-            old_yes = self.rest_yes_shares
-            old_no = self.rest_no_shares
-            
             self._reconcile_positions()
             self.last_reconcile = now
-            
-            # OPENING MODE: Detect fill and cancel other side
-            if self.in_opening_mode:
-                if old_yes < 0.01 and self.rest_yes_shares > 0.01:
-                    print(f"[OPENING] YES FILLED: {self.rest_yes_shares:.2f} shares", flush=True)
-                    self._cancel_other_side_on_fill(self.yes_token)
-                if old_no < 0.01 and self.rest_no_shares > 0.01:
-                    print(f"[OPENING] NO FILLED: {self.rest_no_shares:.2f} shares", flush=True)
-                    self._cancel_other_side_on_fill(self.no_token)
         
         # Determine state based on inventory and time
         if self.has_inventory:
@@ -1063,6 +1441,9 @@ class SafeRunnerV5:
                 print(f"[START] Session start cash: ${bal.get('usdc', 0):.2f}", flush=True)
             except:
                 pass
+            
+            # V9 FIX: Window start cleanup - cancel ALL orders before quoting
+            self._window_start_cleanup()
             
             # Initial reconcile
             self._reconcile_positions()

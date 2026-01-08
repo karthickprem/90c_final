@@ -1,0 +1,177 @@
+{
+  "scan_time": "2026-01-04T09:10:27.257855+00:00",
+  "markets_scanned": 10,
+  "sample_per_market": 30,
+  "markets": [
+    {
+      "slug": "will-eleven-die-in-stranger-things-season-5",
+      "num_outcomes": 2,
+      "is_binary": true,
+      "valid_ticks": 0,
+      "invalid_ticks": 30,
+      "invalid_rate": 1.0,
+      "invalid_reasons": {
+        "zero_price": 30
+      },
+      "spread_p50_cents": 0,
+      "spread_p90_cents": 0,
+      "ask_sum_min": 1.0,
+      "multi_arb_rate": 0.0,
+      "feasibility_rates": {},
+      "viability_score": -1
+    },
+    {
+      "slug": "fed-decreases-interest-rates-by-50-bps-after-january-2026-meeting",
+      "num_outcomes": 2,
+      "is_binary": true,
+      "valid_ticks": 0,
+      "invalid_ticks": 30,
+      "invalid_rate": 1.0,
+      "invalid_reasons": {
+        "price_too_low": 30
+      },
+      "spread_p50_cents": 0,
+      "spread_p90_cents": 0,
+      "ask_sum_min": 1.0,
+      "multi_arb_rate": 0.0,
+      "feasibility_rates": {},
+      "viability_score": -1
+    },
+    {
+      "slug": "will-the-carolina-panthers-win-super-bowl-2026",
+      "num_outcomes": 2,
+      "is_binary": true,
+      "valid_ticks": 0,
+      "invalid_ticks": 30,
+      "invalid_rate": 1.0,
+      "invalid_reasons": {
+        "price_too_low": 30
+      },
+      "spread_p50_cents": 0,
+      "spread_p90_cents": 0,
+      "ask_sum_min": 1.0,
+      "multi_arb_rate": 0.0,
+      "feasibility_rates": {},
+      "viability_score": -1
+    },
+    {
+      "slug": "fed-increases-interest-rates-by-25-bps-after-january-2026-meeting",
+      "num_outcomes": 2,
+      "is_binary": true,
+      "valid_ticks": 0,
+      "invalid_ticks": 30,
+      "invalid_rate": 1.0,
+      "invalid_reasons": {
+        "price_too_low": 30
+      },
+      "spread_p50_cents": 0,
+      "spread_p90_cents": 0,
+      "ask_sum_min": 1.0,
+      "multi_arb_rate": 0.0,
+      "feasibility_rates": {},
+      "viability_score": -1
+    },
+    {
+      "slug": "us-x-venezuela-military-engagement-by-december-31-391-819-722-945-174-285-817-971-353-859-836-598-255-382-192-983",
+      "num_outcomes": 2,
+      "is_binary": true,
+      "valid_ticks": 0,
+      "invalid_ticks": 30,
+      "invalid_rate": 1.0,
+      "invalid_reasons": {
+        "zero_price": 30
+      },
+      "spread_p50_cents": 0,
+      "spread_p90_cents": 0,
+      "ask_sum_min": 1.0,
+      "multi_arb_rate": 0.0,
+      "feasibility_rates": {},
+      "viability_score": -1
+    },
+    {
+      "slug": "will-leeds-win-the-202526-english-premier-league",
+      "num_outcomes": 2,
+      "is_binary": true,
+      "valid_ticks": 0,
+      "invalid_ticks": 30,
+      "invalid_rate": 1.0,
+      "invalid_reasons": {
+        "price_too_low": 30
+      },
+      "spread_p50_cents": 0,
+      "spread_p90_cents": 0,
+      "ask_sum_min": 1.0,
+      "multi_arb_rate": 0.0,
+      "feasibility_rates": {},
+      "viability_score": -1
+    },
+    {
+      "slug": "will-slavia-pragu-win-the-202526-champions-league",
+      "num_outcomes": 2,
+      "is_binary": true,
+      "valid_ticks": 0,
+      "invalid_ticks": 30,
+      "invalid_rate": 1.0,
+      "invalid_reasons": {
+        "price_too_low": 30
+      },
+      "spread_p50_cents": 0,
+      "spread_p90_cents": 0,
+      "ask_sum_min": 1.0,
+      "multi_arb_rate": 0.0,
+      "feasibility_rates": {},
+      "viability_score": -1
+    },
+    {
+      "slug": "will-chelsea-clinton-win-the-2028-democratic-presidential-nomination",
+      "num_outcomes": 2,
+      "is_binary": true,
+      "valid_ticks": 0,
+      "invalid_ticks": 30,
+      "invalid_rate": 1.0,
+      "invalid_reasons": {
+        "price_too_low": 30
+      },
+      "spread_p50_cents": 0,
+      "spread_p90_cents": 0,
+      "ask_sum_min": 1.0,
+      "multi_arb_rate": 0.0,
+      "feasibility_rates": {},
+      "viability_score": -1
+    },
+    {
+      "slug": "will-andrew-yang-win-the-2028-democratic-presidential-nomination",
+      "num_outcomes": 2,
+      "is_binary": true,
+      "valid_ticks": 0,
+      "invalid_ticks": 30,
+      "invalid_rate": 1.0,
+      "invalid_reasons": {
+        "price_too_low": 30
+      },
+      "spread_p50_cents": 0,
+      "spread_p90_cents": 0,
+      "ask_sum_min": 1.0,
+      "multi_arb_rate": 0.0,
+      "feasibility_rates": {},
+      "viability_score": -1
+    },
+    {
+      "slug": "will-oprah-winfrey-win-the-2028-democratic-presidential-nomination",
+      "num_outcomes": 2,
+      "is_binary": true,
+      "valid_ticks": 0,
+      "invalid_ticks": 30,
+      "invalid_rate": 1.0,
+      "invalid_reasons": {
+        "price_too_low": 30
+      },
+      "spread_p50_cents": 0,
+      "spread_p90_cents": 0,
+      "ask_sum_min": 1.0,
+      "multi_arb_rate": 0.0,
+      "feasibility_rates": {},
+      "viability_score": -1
+    }
+  ]
+}

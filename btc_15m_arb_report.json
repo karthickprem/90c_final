@@ -1,0 +1,44 @@
+{
+  "report_timestamp": "2026-01-04T06:01:41.570285+00:00",
+  "market": "Polymarket BTC 15-min Up/Down",
+  "v1_analysis": {
+    "version": "V1 (unconstrained)",
+    "windows": 1,
+    "trades": 27,
+    "hedged_windows": 0,
+    "unhedged_windows": 1,
+    "total_unhedged_exposure": 5.000000000000002,
+    "issues": [
+      {
+        "window": "btc-updown-15m-1767504600",
+        "problem": "Bought 250.0 Up shares, 0 Down (unhedged)",
+        "exposure": 5.000000000000002
+      }
+    ]
+  },
+  "v2_analysis": {
+    "version": "V2 (constrained)",
+    "strategy": "M",
+    "windows": 3,
+    "ticks_total": 30,
+    "bids_posted": 2,
+    "bids_filled_up": 1,
+    "bids_filled_down": 0,
+    "pairs_completed": 0,
+    "entry_blocked_feasibility": 0,
+    "entry_blocked_risk_cap": 0,
+    "rescues_triggered": 0,
+    "hedged_windows": 0,
+    "unhedged_windows": 3,
+    "total_guaranteed_profit": 0,
+    "total_max_loss": 2.4,
+    "pair_costs": [],
+    "guaranteed_profits": []
+  },
+  "conclusions": {
+    "instant_arb_exists": false,
+    "legging_without_constraints_viable": false,
+    "maker_spread_capture_viable": "UNKNOWN - NEED MORE DATA",
+    "recommended_next_step": "Run Variant M for 200+ windows"
+  }
+}

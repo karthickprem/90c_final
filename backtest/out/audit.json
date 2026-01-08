@@ -1,0 +1,376 @@
+{
+  "neither_touched_90": [
+    {
+      "window_id": "25_10_30_23_00_23_15",
+      "winner": "UNCLEAR",
+      "max_up_cents": 0,
+      "max_down_cents": 1,
+      "max_elapsed": 886.948
+    },
+    {
+      "window_id": "25_10_30_23_15_23_30",
+      "winner": "UNCLEAR",
+      "max_up_cents": 1,
+      "max_down_cents": 1,
+      "max_elapsed": 1552.188
+    },
+    {
+      "window_id": "25_10_30_23_30_23_45",
+      "winner": "UNCLEAR",
+      "max_up_cents": 0,
+      "max_down_cents": 0,
+      "max_elapsed": null
+    },
+    {
+      "window_id": "25_10_31_05_30_05_45",
+      "winner": "UP",
+      "max_up_cents": 85,
+      "max_down_cents": 70,
+      "max_elapsed": 2699.792
+    },
+    {
+      "window_id": "25_11_03_05_45_06_00",
+      "winner": "DOWN",
+      "max_up_cents": 84,
+      "max_down_cents": 85,
+      "max_elapsed": 3599.319
+    },
+    {
+      "window_id": "25_11_15_06_15_06_30",
+      "winner": "DOWN",
+      "max_up_cents": 87,
+      "max_down_cents": 87,
+      "max_elapsed": 1799.833
+    },
+    {
+      "window_id": "25_11_18_05_45_06_00",
+      "winner": "UNCLEAR",
+      "max_up_cents": 0,
+      "max_down_cents": 0,
+      "max_elapsed": null
+    },
+    {
+      "window_id": "25_11_18_06_00_06_15",
+      "winner": "UNCLEAR",
+      "max_up_cents": 52,
+      "max_down_cents": 50,
+      "max_elapsed": 886.707
+    },
+    {
+      "window_id": "25_11_22_07_45_08_00",
+      "winner": "DOWN",
+      "max_up_cents": 81,
+      "max_down_cents": 72,
+      "max_elapsed": 3599.647
+    },
+    {
+      "window_id": "25_11_25_18_45_19_00",
+      "winner": "UP",
+      "max_up_cents": 64,
+      "max_down_cents": 49,
+      "max_elapsed": 2738.863
+    },
+    {
+      "window_id": "25_12_02_02_00_02_15",
+      "winner": "UNCLEAR",
+      "max_up_cents": 61,
+      "max_down_cents": 67,
+      "max_elapsed": 218.22
+    },
+    {
+      "window_id": "25_12_02_07_45_08_00",
+      "winner": "DOWN",
+      "max_up_cents": 83,
+      "max_down_cents": 80,
+      "max_elapsed": 3599.977
+    },
+    {
+      "window_id": "25_12_04_21_45_22_00",
+      "winner": "UNCLEAR",
+      "max_up_cents": 0,
+      "max_down_cents": 0,
+      "max_elapsed": null
+    },
+    {
+      "window_id": "25_12_04_22_00_22_15",
+      "winner": "UNCLEAR",
+      "max_up_cents": 52,
+      "max_down_cents": 52,
+      "max_elapsed": 881.73
+    },
+    {
+      "window_id": "25_12_05_02_00_02_15",
+      "winner": "UNCLEAR",
+      "max_up_cents": 0,
+      "max_down_cents": 0,
+      "max_elapsed": null
+    },
+    {
+      "window_id": "25_12_05_08_45_09_00",
+      "winner": "UP",
+      "max_up_cents": 70,
+      "max_down_cents": 57,
+      "max_elapsed": 2898.536
+    },
+    {
+      "window_id": "25_12_09_11_30_11_45",
+      "winner": "DOWN",
+      "max_up_cents": 64,
+      "max_down_cents": 87,
+      "max_elapsed": 2699.914
+    },
+    {
+      "window_id": "25_12_12_02_15_02_30",
+      "winner": "DOWN",
+      "max_up_cents": 81,
+      "max_down_cents": 84,
+      "max_elapsed": 1799.64
+    },
+    {
+      "window_id": "25_12_12_16_45_17_00",
+      "winner": "UNCLEAR",
+      "max_up_cents": 0,
+      "max_down_cents": 0,
+      "max_elapsed": null
+    },
+    {
+      "window_id": "25_12_12_22_30_22_45",
+      "winner": "DOWN",
+      "max_up_cents": 85,
+      "max_down_cents": 89,
+      "max_elapsed": 2699.609
+    },
+    {
+      "window_id": "25_12_13_05_00_05_15",
+      "winner": "UP",
+      "max_up_cents": 79,
+      "max_down_cents": 79,
+      "max_elapsed": 899.769
+    },
+    {
+      "window_id": "25_12_13_08_15_08_30",
+      "winner": "UNCLEAR",
+      "max_up_cents": 0,
+      "max_down_cents": 0,
+      "max_elapsed": null
+    },
+    {
+      "window_id": "25_12_13_08_45_09_00",
+      "winner": "UNCLEAR",
+      "max_up_cents": 52,
+      "max_down_cents": 57,
+      "max_elapsed": 3599.76
+    },
+    {
+      "window_id": "25_12_14_07_00_07_15",
+      "winner": "UP",
+      "max_up_cents": 87,
+      "max_down_cents": 79,
+      "max_elapsed": 899.948
+    },
+    {
+      "window_id": "25_12_17_00_45_01_00",
+      "winner": "UNCLEAR",
+      "max_up_cents": 0,
+      "max_down_cents": 0,
+      "max_elapsed": null
+    },
+    {
+      "window_id": "25_12_17_01_00_01_15",
+      "winner": "UNCLEAR",
+      "max_up_cents": 55,
+      "max_down_cents": 52,
+      "max_elapsed": 887.439
+    },
+    {
+      "window_id": "25_12_17_08_15_08_30",
+      "winner": "UNCLEAR",
+      "max_up_cents": 50,
+      "max_down_cents": 51,
+      "max_elapsed": 900.191
+    },
+    {
+      "window_id": "25_12_18_18_30_18_45",
+      "winner": "UNCLEAR",
+      "max_up_cents": 0,
+      "max_down_cents": 0,
+      "max_elapsed": null
+    },
+    {
+      "window_id": "25_12_18_18_45_19_00",
+      "winner": "UP",
+      "max_up_cents": 54,
+      "max_down_cents": 51,
+      "max_elapsed": 3582.264
+    },
+    {
+      "window_id": "25_12_18_19_15_19_30",
+      "winner": "UP",
+      "max_up_cents": 88,
+      "max_down_cents": 85,
+      "max_elapsed": 1799.758
+    },
+    {
+      "window_id": "25_12_19_09_00_09_15",
+      "winner": "DOWN",
+      "max_up_cents": 51,
+      "max_down_cents": 89,
+      "max_elapsed": 510.214
+    },
+    {
+      "window_id": "25_12_19_13_30_13_45",
+      "winner": "DOWN",
+      "max_up_cents": 86,
+      "max_down_cents": 88,
+      "max_elapsed": 2497.595
+    },
+    {
+      "window_id": "25_12_19_15_00_15_15",
+      "winner": "UP",
+      "max_up_cents": 66,
+      "max_down_cents": 76,
+      "max_elapsed": 651.158
+    }
+  ],
+  "neither_touched_90_clear": [
+    "25_10_31_05_30_05_45",
+    "25_11_03_05_45_06_00",
+    "25_11_15_06_15_06_30",
+    "25_11_22_07_45_08_00",
+    "25_11_25_18_45_19_00",
+    "25_12_02_07_45_08_00",
+    "25_12_05_08_45_09_00",
+    "25_12_09_11_30_11_45",
+    "25_12_12_02_15_02_30",
+    "25_12_12_22_30_22_45",
+    "25_12_13_05_00_05_15",
+    "25_12_14_07_00_07_15",
+    "25_12_18_18_45_19_00",
+    "25_12_18_19_15_19_30",
+    "25_12_19_09_00_09_15",
+    "25_12_19_13_30_13_45",
+    "25_12_19_15_00_15_15"
+  ],
+  "neither_touched_90_unclear": [
+    "25_10_30_23_00_23_15",
+    "25_10_30_23_15_23_30",
+    "25_10_30_23_30_23_45",
+    "25_11_18_05_45_06_00",
+    "25_11_18_06_00_06_15",
+    "25_12_02_02_00_02_15",
+    "25_12_04_21_45_22_00",
+    "25_12_04_22_00_22_15",
+    "25_12_05_02_00_02_15",
+    "25_12_12_16_45_17_00",
+    "25_12_13_08_15_08_30",
+    "25_12_13_08_45_09_00",
+    "25_12_17_00_45_01_00",
+    "25_12_17_01_00_01_15",
+    "25_12_17_08_15_08_30",
+    "25_12_18_18_30_18_45"
+  ],
+  "up_touched_down_won_down_never_touched": [
+    {
+      "window_id": "25_11_12_06_15_06_30",
+      "max_up_cents": 90,
+      "max_down_cents": 80,
+      "max_elapsed": 1799.223
+    },
+    {
+      "window_id": "25_11_18_10_00_10_15",
+      "max_up_cents": 97,
+      "max_down_cents": 61,
+      "max_elapsed": 899.73
+    },
+    {
+      "window_id": "25_11_30_21_30_21_45",
+      "max_up_cents": 92,
+      "max_down_cents": 80,
+      "max_elapsed": 2699.288
+    },
+    {
+      "window_id": "25_12_01_21_45_22_00",
+      "max_up_cents": 95,
+      "max_down_cents": 85,
+      "max_elapsed": 3599.664
+    },
+    {
+      "window_id": "25_12_10_09_00_09_15",
+      "max_up_cents": 95,
+      "max_down_cents": 80,
+      "max_elapsed": 899.646
+    },
+    {
+      "window_id": "25_12_11_11_30_11_45",
+      "max_up_cents": 94,
+      "max_down_cents": 88,
+      "max_elapsed": 2699.031
+    }
+  ],
+  "down_touched_up_won_up_never_touched": [
+    {
+      "window_id": "25_10_31_05_45_06_00",
+      "max_up_cents": 89,
+      "max_down_cents": 94,
+      "max_elapsed": 3599.743
+    },
+    {
+      "window_id": "25_11_22_01_00_01_15",
+      "max_up_cents": 80,
+      "max_down_cents": 95,
+      "max_elapsed": 899.736
+    },
+    {
+      "window_id": "25_11_22_06_45_07_00",
+      "max_up_cents": 89,
+      "max_down_cents": 90,
+      "max_elapsed": 3599.137
+    },
+    {
+      "window_id": "25_11_27_23_30_23_45",
+      "max_up_cents": 74,
+      "max_down_cents": 91,
+      "max_elapsed": 2699.883
+    },
+    {
+      "window_id": "25_12_04_09_15_09_30",
+      "max_up_cents": 86,
+      "max_down_cents": 94,
+      "max_elapsed": 1799.779
+    },
+    {
+      "window_id": "25_12_09_14_00_14_15",
+      "max_up_cents": 86,
+      "max_down_cents": 95,
+      "max_elapsed": 899.666
+    },
+    {
+      "window_id": "25_12_16_13_00_13_15",
+      "max_up_cents": 77,
+      "max_down_cents": 99,
+      "max_elapsed": 899.761
+    }
+  ],
+  "heavy_truncation": [
+    {
+      "window_id": "25_12_05_08_45_09_00",
+      "num_ticks": 285,
+      "ticks_truncated": 56,
+      "truncation_pct": "19.6%",
+      "backward_jumps": 1
+    }
+  ],
+  "max_elapsed_small": [],
+  "counts": {
+    "neither_touched_90_total": 33,
+    "neither_touched_90_clear": 17,
+    "neither_touched_90_unclear": 16,
+    "up_touched_down_won_down_never_touched": 6,
+    "down_touched_up_won_up_never_touched": 7,
+    "heavy_truncation": 1,
+    "max_elapsed_small": 0,
+    "summary_neither_touch_total": 33,
+    "summary_neither_touch_total_clear": 17,
+    "summary_neither_touch_unclear": 16
+  }
+}

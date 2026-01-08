@@ -1,0 +1,196 @@
+{
+  "params": {
+    "edge_floor": 0.005,
+    "model_q_persist_ticks": 5,
+    "model_q_fill_fraction": 0.5,
+    "prefilter_max_price_distance": 0.1
+  },
+  "summary": {
+    "L": {
+      "first_leg_fills": 3,
+      "completed_pairs": 3,
+      "p_complete_given_first": 1.0,
+      "edge_median": 0.0,
+      "edge_p10": 0.0
+    },
+    "M": {
+      "first_leg_fills": 3,
+      "completed_pairs": 3,
+      "p_complete_given_first": 1.0,
+      "edge_median": 0.0,
+      "edge_p10": 0.0
+    },
+    "Q": {
+      "first_leg_fills": 3,
+      "completed_pairs": 3,
+      "p_complete_given_first": 1.0,
+      "edge_median": 0.0,
+      "edge_p10": 0.0
+    }
+  },
+  "windows": [
+    {
+      "slug": "btc-updown-15m-1767507300",
+      "passed_prefilter": false,
+      "price_distance": 0.12999999999999995,
+      "volatility_proxy": 0.58,
+      "quotes_posted": 0,
+      "cancels": 0,
+      "avg_quote_lifetime": 0,
+      "first_leg_fills": {
+        "L": 0,
+        "M": 0,
+        "Q": 0
+      },
+      "completed_pairs": {
+        "L": 0,
+        "M": 0,
+        "Q": 0
+      },
+      "edge_nets": {
+        "L": [],
+        "M": [],
+        "Q": []
+      },
+      "time_to_complete": 0.0,
+      "time_unhedged": 0.0,
+      "max_unhedged_exposure": 0.0,
+      "mode": "stopped",
+      "ticks_seen": 725
+    },
+    {
+      "slug": "btc-updown-15m-1767508200",
+      "passed_prefilter": true,
+      "price_distance": 0.05500000000000005,
+      "volatility_proxy": 0.52,
+      "quotes_posted": 4,
+      "cancels": 4,
+      "avg_quote_lifetime": 434.48390424251556,
+      "first_leg_fills": {
+        "L": 1,
+        "M": 1,
+        "Q": 1
+      },
+      "completed_pairs": {
+        "L": 1,
+        "M": 1,
+        "Q": 1
+      },
+      "edge_nets": {
+        "L": [
+          0.0
+        ],
+        "M": [
+          0.0
+        ],
+        "Q": [
+          0.0
+        ]
+      },
+      "time_to_complete": 88.7437310218811,
+      "time_unhedged": 67.5,
+      "max_unhedged_exposure": 1.2875,
+      "mode": "stopped",
+      "ticks_seen": 1001
+    },
+    {
+      "slug": "btc-updown-15m-1767509100",
+      "passed_prefilter": true,
+      "price_distance": 0.050000000000000044,
+      "volatility_proxy": 0.535,
+      "quotes_posted": 3,
+      "cancels": 3,
+      "avg_quote_lifetime": 579.1185002326965,
+      "first_leg_fills": {
+        "L": 1,
+        "M": 1,
+        "Q": 1
+      },
+      "completed_pairs": {
+        "L": 1,
+        "M": 1,
+        "Q": 1
+      },
+      "edge_nets": {
+        "L": [
+          0.0
+        ],
+        "M": [
+          0.0
+        ],
+        "Q": [
+          0.0
+        ]
+      },
+      "time_to_complete": 280.90613532066345,
+      "time_unhedged": 407.5,
+      "max_unhedged_exposure": 1.1624999999999999,
+      "mode": "stopped",
+      "ticks_seen": 1001
+    },
+    {
+      "slug": "btc-updown-15m-1767510000",
+      "passed_prefilter": false,
+      "price_distance": 0.22499999999999998,
+      "volatility_proxy": 0.039999999999999925,
+      "quotes_posted": 0,
+      "cancels": 0,
+      "avg_quote_lifetime": 0,
+      "first_leg_fills": {
+        "L": 0,
+        "M": 0,
+        "Q": 0
+      },
+      "completed_pairs": {
+        "L": 0,
+        "M": 0,
+        "Q": 0
+      },
+      "edge_nets": {
+        "L": [],
+        "M": [],
+        "Q": []
+      },
+      "time_to_complete": 0.0,
+      "time_unhedged": 0.0,
+      "max_unhedged_exposure": 0.0,
+      "mode": "stopped",
+      "ticks_seen": 751
+    },
+    {
+      "slug": "btc-updown-15m-1767510900",
+      "passed_prefilter": true,
+      "price_distance": 0.010000000000000009,
+      "volatility_proxy": 0.030000000000000027,
+      "quotes_posted": 3,
+      "cancels": 1,
+      "avg_quote_lifetime": 14.142159938812256,
+      "first_leg_fills": {
+        "L": 1,
+        "M": 1,
+        "Q": 1
+      },
+      "completed_pairs": {
+        "L": 1,
+        "M": 1,
+        "Q": 1
+      },
+      "edge_nets": {
+        "L": [
+          0.0
+        ],
+        "M": [
+          0.0
+        ],
+        "Q": [
+          0.0
+        ]
+      },
+      "time_to_complete": 6.068230867385864,
+      "time_unhedged": 5.5,
+      "max_unhedged_exposure": 1.2375,
+      "mode": "rescue",
+      "ticks_seen": 282
+    }
+  ]
+}

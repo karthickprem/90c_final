@@ -1,0 +1,28 @@
+[
+  {
+    "id": "activity_001",
+    "timestamp": "2024-12-15T10:30:10Z",
+    "type": "merge",
+    "conditionId": "0xabc123",
+    "amount": 100,
+    "transactionHash": "0xmerge001"
+  },
+  {
+    "id": "activity_002",
+    "timestamp": "2024-12-15T11:15:00Z",
+    "type": "redeem",
+    "conditionId": "0xdef456",
+    "amount": 50,
+    "cashDelta": 50.0,
+    "transactionHash": "0xredeem001"
+  },
+  {
+    "id": "activity_003",
+    "timestamp": "2024-12-15T12:00:00Z",
+    "type": "reward",
+    "amount": 5.0,
+    "transactionHash": "0xreward001"
+  }
+]
+
+

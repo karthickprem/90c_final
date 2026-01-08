@@ -1,0 +1,29 @@
+{
+  "config": {
+    "max_combined_cost": 100,
+    "min_edge_cents": 1,
+    "size_per_trade": 10.0
+  },
+  "results": {
+    "total_windows": 2423,
+    "total_trades": 1002,
+    "hit_rate": 0.41353693768056127,
+    "total_pnl": 146.6,
+    "pnl_per_window": 0.060503508047874535,
+    "avg_edge": 1.4630738522954092,
+    "edge_distribution": {
+      "6": 7,
+      "1": 765,
+      "2": 149,
+      "12": 1,
+      "3": 44,
+      "5": 10,
+      "4": 16,
+      "7": 1,
+      "8": 4,
+      "11": 2,
+      "22": 1,
+      "10": 2
+    }
+  }
+}

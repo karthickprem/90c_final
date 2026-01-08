@@ -1,0 +1,35 @@
+[
+  {
+    "probe_num": 1,
+    "entry_price": 0.48,
+    "filled": true,
+    "fill_time_ms": 8305.891752243042,
+    "exit_posted": true,
+    "exit_post_latency_ms": 1500.8938312530518,
+    "exit_filled": false,
+    "inventory_cleared": false,
+    "error": null
+  },
+  {
+    "probe_num": 2,
+    "entry_price": 0.74,
+    "filled": true,
+    "fill_time_ms": 4302.496910095215,
+    "exit_posted": false,
+    "exit_post_latency_ms": 0.0,
+    "exit_filled": false,
+    "inventory_cleared": false,
+    "error": "Exit order failed"
+  },
+  {
+    "probe_num": 3,
+    "entry_price": 0.78,
+    "filled": false,
+    "fill_time_ms": 0.0,
+    "exit_posted": false,
+    "exit_post_latency_ms": 0.0,
+    "exit_filled": false,
+    "inventory_cleared": false,
+    "error": "Entry failed: PolyApiException[status_code=400, error_message={'error': 'not enough balance / allowance'}]"
+  }
+]

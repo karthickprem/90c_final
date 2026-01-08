@@ -1,0 +1,20 @@
+{
+  "windows_seen": 9,
+  "trades_attempted": 0,
+  "trades_executed": 0,
+  "pre_arm_triggers": 0,
+  "direct_triggers": 0,
+  "scaled_up_count": 0,
+  "avg_entry_ask": 0,
+  "avg_entry_spread": 0,
+  "avg_entry_fill": 0,
+  "skip_reasons": {
+    "REGIME_ALREADY_DECIDED": 9
+  },
+  "exit_reasons": {},
+  "total_pnl": 0,
+  "avg_pnl": 0,
+  "win_rate": 0,
+  "gap_count": 0,
+  "worst_loss": 0
+}

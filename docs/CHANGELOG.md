@@ -1,79 +1,59 @@
 # Changelog
 
-## V6 (2026-01-08) - Anti-Pyramiding + Continuous Mode
+## V12 - Production Safety (2026-01-08)
 
-### Critical Fixes
-- **15s Entry Cooldown**: Prevents multiple orders before fill confirmation
-- **Track All Entry Orders**: Maintains set of all posted entry order IDs
-- **Cancel-Confirm Exits**: Always cancel existing exit before posting new
-- **avgPrice Fallback**: Uses current book price when REST returns 0
+### Files Changed
+- `scripts/mm_live_verify_once.py` - Complete rewrite with V12 safety
 
-### New Features
-- **Continuous Mode** (`scripts/mm_continuous.py`):
-  - Auto-discovers new 15-min windows
-  - Transitions automatically between windows
-  - Reports PnL per window and session total
-- **Dynamic Position Sizing**: 15% of account balance (min $1.50, max $10)
+### Fixes Applied
+1. **Trade Ingestion Boundary**: 
+   - `window_start_ts = time.time() - 2`
+   - Ignore trades before boundary
+   - Filter by market token IDs only
 
-### Fixes
-- Fixed pyramiding bug where 4 orders would fill (20 shares instead of 5)
-- Fixed exit pricing when avgPrice=0 (was posting at $0.02 instead of $0.43)
-- Fixed BALANCE_ERROR spam by refreshing positions before retry
+2. **Regime + Rebate Viability**:
+   - Strict mid range: [0.40, 0.60] for verification
+   - Spread <= 3c
+   - Volatility <= 8c
+   - Time to end >= 180s
+   - Rebate must cover adverse budget (2c/share)
 
----
+3. **Cap Enforcement (Real)**:
+   - MAX_SHARES = 3 (hard cap)
+   - Entry size clamped to min(QUOTE_SIZE, MAX_SHARES)
+   - Cap check after every fill
+   - Breach -> cancel entries, EXIT_ONLY
 
-## V5 (2026-01-07) - Opening Mode + Time-Based Exits
+4. **Exit Management (Automatic)**:
+   - Ladder: entry+1c -> entry -> entry-1c -> entry-2c -> bid (emergency)
+   - Reprice every 5s
+   - Taker exit only in last 60s
 
-### Features
-- **Opening Mode**: Special handling for first 30s of window
-- **Time-Based Exit Ladder**:
-  - T=0-20s: Exit at entry + 2c (TP)
-  - T=20-40s: Exit at entry (scratch)
-  - T=40s+: Cross spread if emergency enabled
+5. **Stop Conditions**:
+   - BALANCE_ERROR on exit
+   - Missing txHash
+   - EXIT without matching entry (code 3)
 
-### Fixes
-- Replaced price-based stop-loss with time-based ladder
-- Added volatility filter (max 12c in 5s window)
-- Widened regime filter to 0.30-0.70
-
----
-
-## V4 (2026-01-06) - Position Reconciliation
-
-### Features
-- REST position reconciliation every 0.5-2s
-- Synthetic entry creation on missed fills
-- Global inventory gate (no entries if inv > 0)
-
-### Issues Found
-- Pyramiding: Multiple orders getting filled
-- Exit repricing posting duplicate SELLs
-- Slow fill detection causing stale state
+### Exit Codes
+- 0 = PASS (complete round-trip)
+- 1 = FAIL (safety violation)
+- 2 = NO_TRADE_SAFE (correctly refused)
+- 3 = STATE_DESYNC (boundary violation)
 
 ---
 
-## V3 (2026-01-05) - Endgame Rules
+## V11 - Fill Tracking Fix (2026-01-08)
 
-### Features
-- Entry cutoff at 3 min to settlement
-- Flatten deadline at 2 min to settlement
-- Emergency taker exit option
-- Spike detection with cooldown
-
----
-
-## V2 (2026-01-04) - Exit Management
-
-### Features
-- Exit supervisor with repricing
-- Cancel-confirm-post pattern
-- Dust mode for < MIN_SHARES positions
+### Issues Identified
+- Trade API uses `transactionHash`, not `id`
+- MAX_SHARES=3 didn't prevent 6-share fill
+- Verifier exited early without exit management
+- Traded at extreme odds (0.15)
 
 ---
 
-## V1 (2026-01-03) - Initial Bot
+## V10 - Failed Fill Tracking (2026-01-08)
 
-### Features
-- Basic quoting at best_bid
-- PostOnly orders for maker rebates
-- Simple inventory tracking
+### Root Cause
+- `trade_id=unknown` because API field name wrong
+- Lost $3.52 on 22-share position

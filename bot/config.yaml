@@ -1,0 +1,155 @@
+# Polymarket London Temperature Bucket Bot Configuration
+# --------------------------------------------------------
+# PAPER TESTING MODE - Conservative settings with SCALP mode
+
+# Target locations (multi-city support)
+locations:
+  - "London"
+  - "New York"
+  - "Los Angeles"
+  - "Chicago"
+primary_location: "London"
+series_query: "highest temperature"
+
+# Date horizon for market discovery (days ahead)
+date_horizon_days: 3
+min_days_ahead: 1  # Skip same-day markets (D+0) in normal mode
+
+# Same-day trading gate (D0)
+enable_same_day: false  # Must be explicitly enabled for scalp mode
+d0_max_risk_multiplier: 0.5  # D0 uses 50% of normal risk cap
+d0_min_remaining_hours: 4  # Require at least 4 hours remaining in day
+
+# Interval constraints
+interval_max_width_f: 6      # Max interval width in F
+min_bucket_width_f: 0.5      # Minimum bucket width in F (for Celsius 1.8F buckets)
+
+# Liquidity requirements
+min_liquidity_shares: 50     # Minimum shares at top-of-book
+min_shares_per_leg: 3        # Minimum shares per bucket leg
+use_depth: true              # Walk asks to compute fill price for size S
+
+# Edge and risk parameters (CONSERVATIVE for paper testing)
+min_edge: 0.05               # 5% minimum edge to consider (before buffer)
+edge_buffer: 0.02            # 2% additional buffer on top of min_edge
+# So total required edge = min_edge + edge_buffer = 7%
+
+# Risk caps (FIXED: per target date, not per entry)
+max_risk_per_day_usd: 2      # Max risk per TARGET DATE (across all entries)
+max_total_open_risk_usd: 6   # Max total open risk across ALL positions
+price_sum_tolerance: 0.30    # Allow 30% deviation from sum=1.0 for lattice check
+
+# Dust protection (hard rules)
+dust_price_threshold: 0.01   # Prices below this are suspicious
+dust_min_size_for_low_price: 500  # If price < threshold, require this much size
+dust_max_slippage_pct: 0.05  # 5% max slippage for low-price trades
+
+# Partition sanity check
+partition_sum_min: 0.70      # Implied sum of all buckets must be >= this
+partition_sum_max: 1.30      # Implied sum of all buckets must be <= this
+
+# ============================================================
+# EXIT ENGINE (SCALP MODE)
+# ============================================================
+exit_engine:
+  enabled: true
+  
+  # Take profit thresholds (exit when either is met)
+  take_profit_abs_usd: 0.20  # Exit if unrealized PnL >= $0.20
+  take_profit_pct: 0.20      # Exit if unrealized PnL >= 20% of cost
+  
+  # Stop loss thresholds
+  stop_loss_abs_usd: 0.30    # Exit if unrealized loss >= $0.30
+  stop_loss_pct: 0.25        # Exit if unrealized loss >= 25% of cost
+  
+  # Time stops
+  time_stop_minutes: 120     # Exit after 2 hours regardless (scalp mode)
+  settlement_cutoff_hours: 2 # Don't exit within N hours of settlement
+  
+  # Fair value exit
+  fair_value_close: true     # Exit when best_bid >= fair_value - epsilon
+  fair_value_epsilon: 0.02   # 2% buffer on fair value
+  
+  # Liquidity guard for exit
+  min_exit_fill_pct: 0.50    # Only exit if can fill >= 50% of position (for entry check)
+  max_exit_slippage_pct: 0.10  # Max 10% slippage on exit
+
+# ============================================================
+# SCALP MODE SETTINGS
+# ============================================================
+scalp_mode:
+  enabled: false             # Must be explicitly enabled
+  scan_interval_seconds: 120 # 2 minute scans in scalp mode
+  max_positions_per_day: 5   # Max paper positions per day
+  min_edge_scalp: 0.03       # Lower edge threshold for scalp (3% + buffer = 5%)
+
+# Execution mode
+dry_run: true                # Default to paper trading (no real orders)
+live_enabled: false          # Must explicitly enable for live trading
+trading_enabled: true        # Master switch to pause new entries
+
+# Execution parameters
+order_timeout_seconds: 30    # Time to wait for order fill
+slippage_cap_pct: 0.005      # 0.5% max slippage above limit price
+max_api_errors_before_kill: 5
+
+# Forecast configuration
+forecast_source: "open_meteo"  # Pluggable: open_meteo, visual_crossing, etc.
+
+# Known station mappings for resolution accuracy
+# Format: city_lower -> {station_id, lat, lon, name, timezone}
+station_mappings:
+  new york:
+    station_id: "KLGA"
+    lat: 40.7769
+    lon: -73.8740
+    name: "LaGuardia Airport"
+    timezone: "America/New_York"
+  london:
+    station_id: "EGLL"
+    lat: 51.4700
+    lon: -0.4543
+    name: "Heathrow Airport"
+    timezone: "Europe/London"
+  los angeles:
+    station_id: "KLAX"
+    lat: 33.9425
+    lon: -118.4081
+    name: "LAX Airport"
+    timezone: "America/Los_Angeles"
+  chicago:
+    station_id: "KORD"
+    lat: 41.9742
+    lon: -87.9073
+    name: "O'Hare Airport"
+    timezone: "America/Chicago"
+
+# Model parameters (Normal distribution for daily high)
+sigma_by_horizon:
+  0: 1.5   # Today (but we skip these in normal mode)
+  1: 2.0   # +1 day
+  2: 2.5   # +2 days
+  3: 3.0   # +3 days
+  4: 3.5   # +4 days
+  5: 4.0   # +5 days
+  6: 4.25  # +6 days
+  7: 4.5   # +7 days
+
+# Sigma adjustment for unknown resolution source
+sigma_unknown_source_multiplier: 1.25  # Widen sigma by 25% if station unknown
+
+# API endpoints (public, no auth required for read)
+gamma_api_url: "https://gamma-api.polymarket.com"
+clob_api_url: "https://clob.polymarket.com"
+
+# API credentials (only needed for live trading)
+api_key: null
+api_secret: null
+
+# Database
+db_path: "bot_data.db"
+
+# Logging
+log_level: "INFO"
+log_file: "bot.log"
+reduce_log_noise: true  # Rate-limit suspicious price warnings

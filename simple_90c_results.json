@@ -1,0 +1,11 @@
+{
+  "timestamp": "2026-01-04T12:12:20.389027+00:00",
+  "config": {
+    "max_buy_price": 0.9,
+    "trigger_seconds": 60,
+    "trade_size": 20.0
+  },
+  "total_trades": 0,
+  "total_pnl": 0.0,
+  "trades": []
+}

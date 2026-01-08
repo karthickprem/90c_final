@@ -1,0 +1,40 @@
+{
+  "generated_at": "2026-01-06T00:50:00.000",
+  "aggregate": {
+    "trades": 4,
+    "wins": 3,
+    "losses": 1,
+    "bankroll": 100.126,
+    "starting_bankroll": 100.0,
+    "pnl_total": 0.126,
+    "pnl_pct": 0.13,
+    "avg_entry": 92.5,
+    "avg_exit": 94.0,
+    "worst_loss": -0.0659,
+    "max_drawdown": 0.0013,
+    "gap_count": 0,
+    "severe_count": 0
+  },
+  "by_day": {
+    "2026-01-05": {
+      "trades_total": 4,
+      "trades_executed": 2,
+      "avg_entry": 93.0,
+      "avg_exit": 97.0,
+      "total_pnl": 8.6,
+      "worst_trade": 0.043,
+      "gap_count": 0
+    },
+    "2026-01-06": {
+      "trades_total": 5,
+      "trades_executed": 2,
+      "avg_entry": 92.0,
+      "avg_exit": 91.0,
+      "total_pnl": -2.29,
+      "worst_trade": -0.0659,
+      "gap_count": 0
+    }
+  }
+}
+
+

@@ -1,0 +1,62 @@
+{
+  "params": {
+    "edge_floor": 0.005,
+    "model_q_persist_ticks": 5,
+    "model_q_fill_fraction": 0.5,
+    "prefilter_max_price_distance": 0.5
+  },
+  "summary": {
+    "L": {
+      "first_leg_fills": 1,
+      "completed_pairs": 0,
+      "p_complete_given_first": 0.0,
+      "edge_median": 0,
+      "edge_p10": 0
+    },
+    "M": {
+      "first_leg_fills": 0,
+      "completed_pairs": 0,
+      "p_complete_given_first": 0,
+      "edge_median": 0,
+      "edge_p10": 0
+    },
+    "Q": {
+      "first_leg_fills": 0,
+      "completed_pairs": 0,
+      "p_complete_given_first": 0,
+      "edge_median": 0,
+      "edge_p10": 0
+    }
+  },
+  "windows": [
+    {
+      "slug": "btc-updown-15m-1767508200",
+      "passed_prefilter": true,
+      "price_distance": 0.09000000000000002,
+      "volatility_proxy": 0.0050000000000000044,
+      "quotes_posted": 2,
+      "cancels": 0,
+      "avg_quote_lifetime": 0,
+      "first_leg_fills": {
+        "L": 1,
+        "M": 0,
+        "Q": 0
+      },
+      "completed_pairs": {
+        "L": 0,
+        "M": 0,
+        "Q": 0
+      },
+      "edge_nets": {
+        "L": [],
+        "M": [],
+        "Q": []
+      },
+      "time_to_complete": 0.0,
+      "time_unhedged": 0.0,
+      "max_unhedged_exposure": 0.0,
+      "mode": "normal",
+      "ticks_seen": 5
+    }
+  ]
+}

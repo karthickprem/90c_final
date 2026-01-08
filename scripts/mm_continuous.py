@@ -42,11 +42,11 @@ def calculate_position_size(balance: float) -> float:
     Calculate max USDC locked per position based on account balance.
     
     Strategy:
-    - Use 15% of account per position (conservative)
-    - Min: $1.50, Max: $10.00
+    - Use 30% of account per position (need enough for 5 shares at 50c = $2.50)
+    - Min: $2.50, Max: $10.00
     """
-    size = balance * 0.15
-    size = max(1.50, min(10.00, size))
+    size = balance * 0.30
+    size = max(2.50, min(10.00, size))
     return round(size, 2)
 
 

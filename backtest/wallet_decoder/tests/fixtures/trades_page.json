@@ -1,0 +1,48 @@
+[
+  {
+    "id": "trade_001",
+    "timestamp": "2024-12-15T10:30:00Z",
+    "conditionId": "0xabc123",
+    "title": "Bitcoin Up or Down - December 15, 10:30AM-10:45AM ET",
+    "outcome": "Up",
+    "side": "BUY",
+    "price": 0.45,
+    "size": 100,
+    "transactionHash": "0xtx001"
+  },
+  {
+    "id": "trade_002",
+    "timestamp": "2024-12-15T10:30:05Z",
+    "conditionId": "0xabc123",
+    "title": "Bitcoin Up or Down - December 15, 10:30AM-10:45AM ET",
+    "outcome": "Down",
+    "side": "BUY",
+    "price": 0.52,
+    "size": 100,
+    "transactionHash": "0xtx002"
+  },
+  {
+    "id": "trade_003",
+    "timestamp": "2024-12-15T11:00:00Z",
+    "conditionId": "0xdef456",
+    "title": "Bitcoin Up or Down - December 15, 11:00AM-11:15AM ET",
+    "outcome": "Up",
+    "side": "BUY",
+    "price": 0.91,
+    "size": 50,
+    "transactionHash": "0xtx003"
+  },
+  {
+    "id": "trade_004",
+    "timestamp": "2024-12-15T11:10:00Z",
+    "conditionId": "0xdef456",
+    "title": "Bitcoin Up or Down - December 15, 11:00AM-11:15AM ET",
+    "outcome": "Up",
+    "side": "SELL",
+    "price": 0.95,
+    "size": 50,
+    "transactionHash": "0xtx004"
+  }
+]
+
+

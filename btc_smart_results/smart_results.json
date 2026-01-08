@@ -1,0 +1,23 @@
+{
+  "timestamp": "2026-01-04T11:51:52.281876+00:00",
+  "total_pnl": 0.0,
+  "trades": 2,
+  "trade_details": [
+    {
+      "side": "down",
+      "entry": 0.92,
+      "prob": 0.9524003929055935,
+      "edge": 3.240039290559349,
+      "pnl": 0,
+      "status": "open"
+    },
+    {
+      "side": "down",
+      "entry": 0.92,
+      "prob": 0.9560041741228816,
+      "edge": 3.6004174122881594,
+      "pnl": 0,
+      "status": "open"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+# Polymarket Bot Dependencies
+# Python 3.11+
+
+requests>=2.31.0
+pyyaml>=6.0.1
+scipy>=1.11.0
+numpy>=1.24.0
+python-dateutil>=2.8.2
+
+# For backtesting with historical weather data
+meteostat>=1.6.5
+pandas>=2.0.0
+
+# Testing
+pytest>=7.4.0
+
+# Optional: for live trading (requires API keys)
+# py-clob-client>=0.1.0
+
+# Note: fullset_arb module uses only requests + pyyaml from above
+# Note: pm_15m_arb module uses requests + pyyaml + pytest
+

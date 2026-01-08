@@ -1,0 +1,242 @@
+[
+  {
+    "secs_left": "0-30",
+    "persistence": "any",
+    "trades": 31,
+    "win_rate": 0.9355,
+    "reversal_rate": 0.0323,
+    "avg_entry": 91.32,
+    "ev": 0.0223,
+    "max_fill": 93.5
+  },
+  {
+    "secs_left": "0-30",
+    "persistence": "persist_2s",
+    "trades": 19,
+    "win_rate": 1.0,
+    "reversal_rate": 0.0,
+    "avg_entry": 91.37,
+    "ev": 0.0863,
+    "max_fill": 100.0
+  },
+  {
+    "secs_left": "0-30",
+    "persistence": "persist_3s",
+    "trades": 19,
+    "win_rate": 1.0,
+    "reversal_rate": 0.0,
+    "avg_entry": 91.37,
+    "ev": 0.0863,
+    "max_fill": 100.0
+  },
+  {
+    "secs_left": "0-30",
+    "persistence": "persist_5s",
+    "trades": 18,
+    "win_rate": 1.0,
+    "reversal_rate": 0.0,
+    "avg_entry": 91.44,
+    "ev": 0.0856,
+    "max_fill": 100.0
+  },
+  {
+    "secs_left": "30-60",
+    "persistence": "any",
+    "trades": 35,
+    "win_rate": 0.7714,
+    "reversal_rate": 0.2286,
+    "avg_entry": 90.43,
+    "ev": -0.1329,
+    "max_fill": 77.1
+  },
+  {
+    "secs_left": "30-60",
+    "persistence": "persist_2s",
+    "trades": 26,
+    "win_rate": 0.8077,
+    "reversal_rate": 0.1538,
+    "avg_entry": 90.5,
+    "ev": -0.0973,
+    "max_fill": 80.8
+  },
+  {
+    "secs_left": "30-60",
+    "persistence": "persist_3s",
+    "trades": 24,
+    "win_rate": 0.7917,
+    "reversal_rate": 0.1667,
+    "avg_entry": 90.54,
+    "ev": -0.1138,
+    "max_fill": 79.2
+  },
+  {
+    "secs_left": "30-60",
+    "persistence": "persist_5s",
+    "trades": 20,
+    "win_rate": 0.85,
+    "reversal_rate": 0.1,
+    "avg_entry": 90.65,
+    "ev": -0.0565,
+    "max_fill": 85.0
+  },
+  {
+    "secs_left": "60-100",
+    "persistence": "any",
+    "trades": 40,
+    "win_rate": 0.95,
+    "reversal_rate": 0.05,
+    "avg_entry": 90.85,
+    "ev": 0.0415,
+    "max_fill": 95.0
+  },
+  {
+    "secs_left": "60-100",
+    "persistence": "persist_2s",
+    "trades": 26,
+    "win_rate": 0.9615,
+    "reversal_rate": 0.0385,
+    "avg_entry": 91.27,
+    "ev": 0.0488,
+    "max_fill": 96.2
+  },
+  {
+    "secs_left": "60-100",
+    "persistence": "persist_3s",
+    "trades": 23,
+    "win_rate": 0.9565,
+    "reversal_rate": 0.0435,
+    "avg_entry": 90.78,
+    "ev": 0.0487,
+    "max_fill": 95.7
+  },
+  {
+    "secs_left": "60-100",
+    "persistence": "persist_5s",
+    "trades": 19,
+    "win_rate": 0.9474,
+    "reversal_rate": 0.0526,
+    "avg_entry": 90.68,
+    "ev": 0.0405,
+    "max_fill": 94.7
+  },
+  {
+    "secs_left": "100-200",
+    "persistence": "any",
+    "trades": 138,
+    "win_rate": 0.9058,
+    "reversal_rate": 0.0942,
+    "avg_entry": 90.46,
+    "ev": 0.0012,
+    "max_fill": 90.6
+  },
+  {
+    "secs_left": "100-200",
+    "persistence": "persist_2s",
+    "trades": 92,
+    "win_rate": 0.9674,
+    "reversal_rate": 0.0435,
+    "avg_entry": 90.54,
+    "ev": 0.062,
+    "max_fill": 96.7
+  },
+  {
+    "secs_left": "100-200",
+    "persistence": "persist_3s",
+    "trades": 82,
+    "win_rate": 0.9756,
+    "reversal_rate": 0.0366,
+    "avg_entry": 90.6,
+    "ev": 0.0696,
+    "max_fill": 97.6
+  },
+  {
+    "secs_left": "100-200",
+    "persistence": "persist_5s",
+    "trades": 72,
+    "win_rate": 0.9722,
+    "reversal_rate": 0.0417,
+    "avg_entry": 90.61,
+    "ev": 0.0661,
+    "max_fill": 97.2
+  },
+  {
+    "secs_left": "200-400",
+    "persistence": "any",
+    "trades": 372,
+    "win_rate": 0.8844,
+    "reversal_rate": 0.1183,
+    "avg_entry": 90.24,
+    "ev": -0.018,
+    "max_fill": 88.4
+  },
+  {
+    "secs_left": "200-400",
+    "persistence": "persist_2s",
+    "trades": 254,
+    "win_rate": 0.8819,
+    "reversal_rate": 0.1181,
+    "avg_entry": 90.3,
+    "ev": -0.0211,
+    "max_fill": 88.2
+  },
+  {
+    "secs_left": "200-400",
+    "persistence": "persist_3s",
+    "trades": 225,
+    "win_rate": 0.8756,
+    "reversal_rate": 0.1244,
+    "avg_entry": 90.32,
+    "ev": -0.0276,
+    "max_fill": 87.6
+  },
+  {
+    "secs_left": "200-400",
+    "persistence": "persist_5s",
+    "trades": 204,
+    "win_rate": 0.8873,
+    "reversal_rate": 0.1127,
+    "avg_entry": 90.34,
+    "ev": -0.0162,
+    "max_fill": 88.7
+  },
+  {
+    "secs_left": "400-900",
+    "persistence": "any",
+    "trades": 592,
+    "win_rate": 0.8784,
+    "reversal_rate": 0.147,
+    "avg_entry": 90.23,
+    "ev": -0.0239,
+    "max_fill": 87.8
+  },
+  {
+    "secs_left": "400-900",
+    "persistence": "persist_2s",
+    "trades": 373,
+    "win_rate": 0.8928,
+    "reversal_rate": 0.1206,
+    "avg_entry": 90.23,
+    "ev": -0.0095,
+    "max_fill": 89.3
+  },
+  {
+    "secs_left": "400-900",
+    "persistence": "persist_3s",
+    "trades": 336,
+    "win_rate": 0.8869,
+    "reversal_rate": 0.125,
+    "avg_entry": 90.24,
+    "ev": -0.0154,
+    "max_fill": 88.7
+  },
+  {
+    "secs_left": "400-900",
+    "persistence": "persist_5s",
+    "trades": 282,
+    "win_rate": 0.8901,
+    "reversal_rate": 0.1206,
+    "avg_entry": 90.21,
+    "ev": -0.0121,
+    "max_fill": 89.0
+  }
+]

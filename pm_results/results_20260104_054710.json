@@ -1,0 +1,10 @@
+{
+  "params": {
+    "instant_arb_buffer": 0.01,
+    "cheap_cap": 0.48,
+    "clip_size": 10,
+    "profit_target": 0.1,
+    "stop_buffer_seconds": 60
+  },
+  "results": []
+}

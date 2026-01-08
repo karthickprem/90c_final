@@ -1,0 +1,32 @@
+{
+  "dataset": {
+    "total_windows": 4867,
+    "active_windows": 1212,
+    "windows_with_opportunity": 1011
+  },
+  "trades": {
+    "total": 335,
+    "skipped_negative": 2792
+  },
+  "pnl": {
+    "gross_edge_dollars": 239.9999999999998,
+    "total_fees_dollars": 136.31551000000007,
+    "net_pnl_dollars": 103.68448999999995
+  },
+  "buckets": {
+    "40-50c": {
+      "opportunities": 3124,
+      "profitable_after_fees": 332,
+      "gross_edge_sum": 4441,
+      "fee_sum": 1661.8408575000024,
+      "net_edge_sum": 454.1689750000007
+    },
+    "20-40c": {
+      "opportunities": 3,
+      "profitable_after_fees": 3,
+      "gross_edge_sum": 72,
+      "fee_sum": 1.549305,
+      "net_edge_sum": 64.25347500000001
+    }
+  }
+}

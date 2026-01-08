@@ -1,0 +1,190 @@
+{
+  "params": {
+    "edge_floor": 0.005,
+    "model_q_persist_ticks": 5,
+    "model_q_fill_fraction": 0.5,
+    "prefilter_max_price_distance": 0.1
+  },
+  "summary": {
+    "L": {
+      "first_leg_fills": 3,
+      "completed_pairs": 2,
+      "p_complete_given_first": 0.6666666666666666,
+      "edge_median": 0.0,
+      "edge_p10": 0.0
+    },
+    "M": {
+      "first_leg_fills": 3,
+      "completed_pairs": 2,
+      "p_complete_given_first": 0.6666666666666666,
+      "edge_median": 0.0,
+      "edge_p10": 0.0
+    },
+    "Q": {
+      "first_leg_fills": 3,
+      "completed_pairs": 2,
+      "p_complete_given_first": 0.6666666666666666,
+      "edge_median": 0.0,
+      "edge_p10": 0.0
+    }
+  },
+  "windows": [
+    {
+      "slug": "btc-updown-15m-1767508200",
+      "passed_prefilter": false,
+      "price_distance": 0.35000000000000003,
+      "volatility_proxy": 0.53,
+      "quotes_posted": 0,
+      "cancels": 0,
+      "avg_quote_lifetime": 0,
+      "first_leg_fills": {
+        "L": 0,
+        "M": 0,
+        "Q": 0
+      },
+      "completed_pairs": {
+        "L": 0,
+        "M": 0,
+        "Q": 0
+      },
+      "edge_nets": {
+        "L": [],
+        "M": [],
+        "Q": []
+      },
+      "time_to_complete": 0.0,
+      "time_unhedged": 0.0,
+      "max_unhedged_exposure": 0.0,
+      "mode": "stopped",
+      "ticks_seen": 936
+    },
+    {
+      "slug": "btc-updown-15m-1767509100",
+      "passed_prefilter": true,
+      "price_distance": 0.050000000000000044,
+      "volatility_proxy": 0.5499999999999999,
+      "quotes_posted": 4,
+      "cancels": 4,
+      "avg_quote_lifetime": 434.43996489048004,
+      "first_leg_fills": {
+        "L": 1,
+        "M": 1,
+        "Q": 1
+      },
+      "completed_pairs": {
+        "L": 1,
+        "M": 1,
+        "Q": 1
+      },
+      "edge_nets": {
+        "L": [
+          0.0
+        ],
+        "M": [
+          0.0
+        ],
+        "Q": [
+          0.0
+        ]
+      },
+      "time_to_complete": 280.84406876564026,
+      "time_unhedged": 396.5,
+      "max_unhedged_exposure": 1.1624999999999999,
+      "mode": "stopped",
+      "ticks_seen": 1003
+    },
+    {
+      "slug": "btc-updown-15m-1767510000",
+      "passed_prefilter": false,
+      "price_distance": 0.19999999999999996,
+      "volatility_proxy": 0.039999999999999925,
+      "quotes_posted": 0,
+      "cancels": 0,
+      "avg_quote_lifetime": 0,
+      "first_leg_fills": {
+        "L": 0,
+        "M": 0,
+        "Q": 0
+      },
+      "completed_pairs": {
+        "L": 0,
+        "M": 0,
+        "Q": 0
+      },
+      "edge_nets": {
+        "L": [],
+        "M": [],
+        "Q": []
+      },
+      "time_to_complete": 0.0,
+      "time_unhedged": 0.0,
+      "max_unhedged_exposure": 0.0,
+      "mode": "stopped",
+      "ticks_seen": 747
+    },
+    {
+      "slug": "btc-updown-15m-1767510900",
+      "passed_prefilter": true,
+      "price_distance": 0.010000000000000009,
+      "volatility_proxy": 0.535,
+      "quotes_posted": 3,
+      "cancels": 3,
+      "avg_quote_lifetime": 578.9896939595541,
+      "first_leg_fills": {
+        "L": 1,
+        "M": 1,
+        "Q": 1
+      },
+      "completed_pairs": {
+        "L": 1,
+        "M": 1,
+        "Q": 1
+      },
+      "edge_nets": {
+        "L": [
+          0.0
+        ],
+        "M": [
+          0.0
+        ],
+        "Q": [
+          0.0
+        ]
+      },
+      "time_to_complete": 6.379537105560303,
+      "time_unhedged": 5.5,
+      "max_unhedged_exposure": 1.2375,
+      "mode": "stopped",
+      "ticks_seen": 985
+    },
+    {
+      "slug": "btc-updown-15m-1767511800",
+      "passed_prefilter": true,
+      "price_distance": 0.07000000000000006,
+      "volatility_proxy": 0.010000000000000009,
+      "quotes_posted": 3,
+      "cancels": 1,
+      "avg_quote_lifetime": 7.171403169631958,
+      "first_leg_fills": {
+        "L": 1,
+        "M": 1,
+        "Q": 1
+      },
+      "completed_pairs": {
+        "L": 0,
+        "M": 0,
+        "Q": 0
+      },
+      "edge_nets": {
+        "L": [],
+        "M": [],
+        "Q": []
+      },
+      "time_to_complete": 0.0,
+      "time_unhedged": 4.0,
+      "max_unhedged_exposure": 1.1375,
+      "mode": "rescue",
+      "ticks_seen": 16
+    }
+  ]
+}

@@ -1,0 +1,71 @@
+{
+  "params": {
+    "edge_floor": 0.005,
+    "initial_edge_target": 0.015,
+    "model_m_persist_ticks": 3,
+    "clip_size": 5.0
+  },
+  "summary": {
+    "windows": 3,
+    "model_L": {
+      "first_leg_fills": 2,
+      "completed_pairs": 3,
+      "p_complete_given_first": 1.5
+    },
+    "model_M": {
+      "first_leg_fills": 2,
+      "completed_pairs": 1,
+      "p_complete_given_first": 0.5
+    }
+  },
+  "windows": [
+    {
+      "slug": "btc-updown-15m-1767506400",
+      "volatility_proxy": 0.0045000000000000595,
+      "price_distance": 0.0,
+      "ticks_seen": 54,
+      "first_leg_fills_L": 1,
+      "first_leg_fills_M": 1,
+      "completed_pairs_L": 0,
+      "completed_pairs_M": 0,
+      "time_to_complete": 0.0,
+      "time_unhedged": 247.95648431777954,
+      "final_locked_edge": 0.0,
+      "final_locked_profit": 0.0,
+      "max_unhedged_exposure": 0.05,
+      "bid_updates": 2
+    },
+    {
+      "slug": "btc-updown-15m-1767507300",
+      "volatility_proxy": 0.58,
+      "price_distance": 0.0,
+      "ticks_seen": 1007,
+      "first_leg_fills_L": 1,
+      "first_leg_fills_M": 1,
+      "completed_pairs_L": 3,
+      "completed_pairs_M": 1,
+      "time_to_complete": 8.820000886917114,
+      "time_unhedged": 8.84636402130127,
+      "final_locked_edge": 0.004999999999999893,
+      "final_locked_profit": 0.0749999999999984,
+      "max_unhedged_exposure": 2.725,
+      "bid_updates": 1
+    },
+    {
+      "slug": "btc-updown-15m-1767508200",
+      "volatility_proxy": 0,
+      "price_distance": 0.0,
+      "ticks_seen": 1,
+      "first_leg_fills_L": 0,
+      "first_leg_fills_M": 0,
+      "completed_pairs_L": 0,
+      "completed_pairs_M": 0,
+      "time_to_complete": 0.0,
+      "time_unhedged": 0.0,
+      "final_locked_edge": 0.0,
+      "final_locked_profit": 0.0,
+      "max_unhedged_exposure": 0.0,
+      "bid_updates": 0
+    }
+  ]
+}

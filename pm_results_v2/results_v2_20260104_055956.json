@@ -1,0 +1,49 @@
+{
+  "strategy": "M",
+  "params": {
+    "max_risk_usd_per_window": 2.0,
+    "max_unhedged_qty": 20.0,
+    "min_edge": 0.01,
+    "edge_target": 0.01,
+    "loss_cap": 1.0
+  },
+  "summary": {
+    "windows": 1,
+    "hedged": 0,
+    "total_gp": 0,
+    "total_max_loss": 0
+  },
+  "results": [
+    {
+      "slug": "btc-updown-15m-1767505500",
+      "strategy": "M",
+      "ticks_seen": 0,
+      "entry_attempts": 0,
+      "entry_blocked_by_feasibility": 0,
+      "entry_blocked_by_risk_cap": 0,
+      "rescue_triggered": 0,
+      "bids_posted": 0,
+      "bids_filled_up": 0,
+      "bids_filled_down": 0,
+      "pairs_completed": 0,
+      "hedged": false,
+      "achieved_pair_cost": 0,
+      "guaranteed_profit": 0,
+      "max_loss": 0,
+      "final_position": {
+        "q_up": 0.0,
+        "q_down": 0.0,
+        "cost_up": 0.0,
+        "cost_down": 0.0,
+        "avg_up": 0,
+        "avg_down": 0,
+        "pair_cost": 0,
+        "hedged_qty": 0.0,
+        "unhedged_qty": 0.0,
+        "unhedged_exposure": 0,
+        "guaranteed_profit": 0,
+        "max_loss": 0
+      }
+    }
+  ]
+}

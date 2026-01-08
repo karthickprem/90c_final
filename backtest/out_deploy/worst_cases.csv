@@ -1,0 +1,7 @@
+window_id,side,entry_price,exit_price,exit_reason,pnl_invested,winner_at_settle,sl_triggered,dynamic_sl_level
+25_11_06_08_15_08_30,UP,91,74,STOP_LOSS,-0.1868,UP,True,86
+25_11_12_12_00_12_15,UP,92,78,STOP_LOSS,-0.1522,UP,True,86
+25_11_29_01_45_02_00,UP,91,73,STOP_LOSS,-0.1978,UP,True,86
+25_12_14_17_30_17_45,UP,91,59,STOP_LOSS,-0.3516,DOWN,True,86
+25_12_17_21_30_21_45,DOWN,91,72,STOP_LOSS,-0.2088,UP,True,86
+25_12_20_11_45_12_00,UP,91,70,STOP_LOSS,-0.2308,UP,True,86

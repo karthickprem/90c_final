@@ -1,0 +1,38 @@
+{
+  "params": {
+    "instant_arb_buffer": 0.01,
+    "cheap_cap": 0.48,
+    "clip_size": 10,
+    "profit_target": 0.1,
+    "stop_buffer_seconds": 60
+  },
+  "results": [
+    {
+      "slug": "btc-updown-15m-1767504600",
+      "start_ts": 1767504600,
+      "end_ts": 1767505500,
+      "ticks_seen": 234,
+      "signals_a": 0,
+      "trades_made": 25,
+      "final_position": {
+        "q_up": 250.0,
+        "q_down": 0.0,
+        "cost_up": 5.000000000000002,
+        "cost_down": 0.0,
+        "avg_up": 0.020000000000000007,
+        "avg_down": 0,
+        "pair_cost": 0,
+        "total_cost": 5.000000000000002,
+        "guaranteed_profit": -5.000000000000002,
+        "min_qty": 0.0,
+        "imbalance": 250.0,
+        "num_fills": 25
+      },
+      "winning_side": null,
+      "payout": 0.0,
+      "realized_pnl": 0.0,
+      "max_gp": 0.0,
+      "min_gp": 0
+    }
+  ]
+}

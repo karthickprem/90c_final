@@ -1,0 +1,19 @@
+============================================================
+FORCE FILL PROBE REPORT
+============================================================
+Total probes:        3
+Entry fills:         2
+Exit orders posted:  1
+Exit fills:          0
+Inventory cleared:   0
+
+Avg fill time:       6304ms
+Avg exit latency:    1501ms
+
+--- INDIVIDUAL PROBES ---
+  Probe 1: 0.48 x 5 -> FILL -> EXIT_POST:1501ms
+  Probe 2: 0.74 x 5 -> FILL -> EXIT_POST:0ms ERROR:Exit order failed
+  Probe 3: 0.78 x 5 -> NO_FILL ERROR:Entry failed: PolyApiException[status_code=400, error_message={'error': 'not enough balance / allowance'}]
+============================================================
+VERDICT: PARTIAL - 0/2 properly exited
+============================================================
