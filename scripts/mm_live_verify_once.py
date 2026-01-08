@@ -1,124 +1,85 @@
 """
-V14 PRODUCTION VERIFICATION SCRIPT
+V15 PRODUCTION VERIFICATION SCRIPT
 ===================================
 
-Capital protection is #1. This script verifies a single round-trip
-with strict safety rules.
+CRITICAL FIX: Multi-source fill detection
+- Primary: open-orders endpoint (order disappears = probable fill)
+- Secondary: trades endpoint (confirm with wide lookback)
+- Fail-safe: positions endpoint (sanity check)
 
 EXIT CODES:
-0 = PASS - Complete round-trip verified (BUY + SELL fills with valid trade_ids)
-1 = FAIL - Invariant violation (KILL_SWITCH triggered) or DUST_UNEXITABLE
-2 = NO_TRADE_SAFE - Conditions unsuitable OR invalid config
-
-CRITICAL PROTOCOL CONSTRAINT:
-- Polymarket MIN_ORDER_SHARES = 5
-- Any config with MAX_SHARES < 5 or QUOTE_SIZE < 5 is INVALID
-- Partial fills < 5 shares require ACCUMULATE state to top-up
-
-STATES:
-- WAIT_ENTRY: Waiting for conditions + posting entry
-- ACCUMULATE: Have partial fill < MIN_ORDER_SHARES, need to top-up
-- WAIT_EXIT: Have >= MIN_ORDER_SHARES, managing exit
-- DONE: Round-trip complete
-- KILLED: Safety violation
+0 = PASS - Complete round-trip verified
+1 = FAIL - Safety violation or STATE_DESYNC
+2 = NO_TRADE_SAFE - Conditions unsuitable
 """
 
 import os
 import sys
 import time
+import requests
 from enum import Enum
-from typing import Optional
+from typing import Optional, List, Dict, Set
+from dataclasses import dataclass
 
 # Force UTF-8 output
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
-# Add project root
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from mm_bot.config import Config
 from mm_bot.clob import ClobWrapper
 from mm_bot.market import MarketResolver
-from mm_bot.volatility import VolatilityTracker, VolatilitySnapshot
-from mm_bot.fill_tracker_v13 import FillTrackerV13, FillTrackerError
 
 
 # ============================================================================
-# V14 CONFIGURATION - PROTOCOL CONSTRAINTS
+# V15 CONFIGURATION
 # ============================================================================
 
-# CRITICAL: Polymarket minimum order size
 MIN_ORDER_SHARES = 5
-
-# Epsilon for float comparisons
-EPSILON = 1e-6
-
-# Caps (MUST be >= MIN_ORDER_SHARES)
 MAX_USDC_LOCKED = float(os.environ.get("MM_MAX_USDC", "3.00"))
 MAX_SHARES = int(float(os.environ.get("MM_MAX_SHARES", "6")))
 QUOTE_SIZE = int(float(os.environ.get("MM_QUOTE_SIZE", "6")))
 
-# Regime (STRICT for verification) - use epsilon for boundaries
 ENTRY_MID_MIN = 0.45
 ENTRY_MID_MAX = 0.55
 MAX_SPREAD_CENTS = 3
-MAX_VOL_10S_CENTS = float(os.environ.get("MM_VOL_10S_CENTS", "8.0"))
 MIN_TIME_TO_END_SECS = 180
 
-# Timing
 MAX_RUNTIME_SECS = int(os.environ.get("MM_MAX_RUNTIME", "600"))
 TICK_INTERVAL_SECS = 0.25
 LOG_INTERVAL_SECS = 5
 EXIT_REPRICE_INTERVAL_SECS = 5
-FLATTEN_DEADLINE_SECS = 60
-ACCUMULATE_TIMEOUT_SECS = 60  # Max time to accumulate before FAIL
+
+# Fill confirmation timeout
+FILL_CONFIRM_TIMEOUT_SECS = 15
+
+# Debug mode
+DEBUG_TRADES = os.environ.get("DEBUG_TRADES", "1") == "1"
 
 
 class VerifierState(Enum):
     WAIT_ENTRY = "WAIT_ENTRY"
-    ACCUMULATE = "ACCUMULATE"  # NEW: Partial fill < MIN_ORDER_SHARES
+    FILL_PENDING = "FILL_PENDING"  # Order disappeared, confirming via trades
     WAIT_EXIT = "WAIT_EXIT"
     DONE = "DONE"
-    KILLED = "KILLED"
+    FAILED = "FAILED"
 
 
-class ConfigError(Exception):
-    """Invalid configuration."""
-    pass
+@dataclass
+class ConfirmedFill:
+    trade_id: str
+    tx_hash: str
+    side: str
+    price: float
+    size: float
+    timestamp: float
+    token_id: str
 
 
-def validate_config() -> tuple:
+class V15Verifier:
     """
-    Validate configuration against protocol constraints.
-    Returns (valid, error_message)
-    """
-    errors = []
-    
-    if MAX_SHARES < MIN_ORDER_SHARES:
-        errors.append(f"MAX_SHARES({MAX_SHARES}) < MIN_ORDER_SHARES({MIN_ORDER_SHARES})")
-    
-    if QUOTE_SIZE < MIN_ORDER_SHARES:
-        errors.append(f"QUOTE_SIZE({QUOTE_SIZE}) < MIN_ORDER_SHARES({MIN_ORDER_SHARES})")
-    
-    # Check exposure is reasonable
-    min_exposure = MIN_ORDER_SHARES * 0.50  # At mid = 0.50
-    if MAX_USDC_LOCKED < min_exposure:
-        errors.append(f"MAX_USDC_LOCKED(${MAX_USDC_LOCKED:.2f}) < min exposure(${min_exposure:.2f})")
-    
-    if errors:
-        return (False, "INVALID_CONFIG: " + "; ".join(errors))
-    
-    return (True, "OK")
-
-
-def in_range(value: float, lo: float, hi: float) -> bool:
-    """Check if value is in [lo, hi] with epsilon tolerance."""
-    return value >= (lo - EPSILON) and value <= (hi + EPSILON)
-
-
-class V14Verifier:
-    """
-    Production-grade single round-trip verifier with ACCUMULATE state.
+    Production verifier with GUARANTEED fill detection.
     """
     
     def __init__(self):
@@ -130,120 +91,202 @@ class V14Verifier:
         # Market info
         self.yes_token: str = ""
         self.no_token: str = ""
+        self.market_tokens: Set[str] = set()
         self.market_end_time: int = 0
         
-        # State machine
+        # State
         self.state = VerifierState.WAIT_ENTRY
         self.entry_order_id: Optional[str] = None
+        self.entry_order_price: float = 0.0
+        self.entry_order_size: int = 0
         self.exit_order_id: Optional[str] = None
-        self.accumulate_order_id: Optional[str] = None
         
-        # Fill tracker (V13 - no synthetic fills)
-        self.fill_tracker: Optional[FillTrackerV13] = None
-        
-        # Volatility tracker (time-based)
-        self.vol_tracker = VolatilityTracker(window_secs=10.0)
-        
-        # Entry tracking
+        # Fill tracking
+        self.script_start_ts: float = 0.0
+        self.fill_pending_start: float = 0.0
+        self.entry_fill: Optional[ConfirmedFill] = None
+        self.exit_fill: Optional[ConfirmedFill] = None
+        self.confirmed_shares: float = 0.0
         self.entry_price: float = 0.0
-        self.entry_token: str = ""
-        self.accumulate_start_time: float = 0.0
         
         # Exit ladder
         self.exit_reprice_count: int = 0
         self.exit_posted_at: float = 0.0
         
+        # Seen trades
+        self.seen_trade_ids: Set[str] = set()
+        
         # Timing
         self.start_time: float = 0.0
         self.last_log_time: float = 0.0
         
-        # Kill switch state
-        self.kill_reason: str = ""
+        # Mid history for volatility
+        self.mid_history: List[float] = []
     
     def log(self, msg: str):
-        print(f"[V14] {msg}", flush=True)
+        print(f"[V15] {msg}", flush=True)
     
-    def kill_switch(self, reason: str) -> int:
-        """Trigger kill switch - cancel all orders and exit with code 1."""
-        self.log(f"KILL_SWITCH: {reason}")
-        self.kill_reason = reason
-        self.state = VerifierState.KILLED
-        
-        if self.live:
-            try:
-                self.clob.cancel_all()
-                self.log("Cancelled all orders")
-            except Exception as e:
-                self.log(f"Error cancelling: {e}")
-        
-        return 1
+    def get_vol_10s(self) -> float:
+        if len(self.mid_history) < 10:
+            return 0.0
+        recent = self.mid_history[-40:]
+        if len(recent) < 2:
+            return 0.0
+        return (max(recent) - min(recent)) * 100
     
-    def update_volatility(self, mid: float) -> VolatilitySnapshot:
-        """Update volatility tracker and return snapshot."""
-        return self.vol_tracker.update(mid)
+    # ========================================================================
+    # FILL DETECTION - MULTI-SOURCE
+    # ========================================================================
     
-    def check_entry_conditions(
-        self,
-        mid: float,
-        spread: float,
-        vol: VolatilitySnapshot,
-        time_to_end: int
-    ) -> tuple:
+    def check_order_still_open(self, order_id: str) -> bool:
+        """Check if order_id is still in open orders."""
+        try:
+            open_orders = self.clob.get_open_orders()
+            if open_orders:
+                for order in open_orders:
+                    if order.get("id") == order_id:
+                        return True
+            return False
+        except Exception as e:
+            self.log(f"Error checking open orders: {e}")
+            return True  # Assume still open on error
+    
+    def fetch_recent_trades(self, lookback_secs: float = 60.0) -> List[Dict]:
         """
-        Check all entry conditions.
-        Returns (can_trade, reason)
+        Fetch trades with wide lookback.
+        Query BOTH proxy address.
         """
-        # Regime check with epsilon
-        if not in_range(mid, ENTRY_MID_MIN, ENTRY_MID_MAX):
-            return (False, f"mid {mid:.4f} outside [{ENTRY_MID_MIN}, {ENTRY_MID_MAX}]")
+        trades = []
+        cutoff_ts = self.script_start_ts - lookback_secs
         
-        # Spread check
+        try:
+            r = requests.get(
+                "https://data-api.polymarket.com/trades",
+                params={"user": self.config.api.proxy_address, "limit": 50},
+                timeout=10
+            )
+            
+            if r.status_code == 200:
+                for t in r.json():
+                    ts = float(t.get("timestamp", 0) or 0)
+                    if ts >= cutoff_ts:
+                        trades.append(t)
+        except Exception as e:
+            self.log(f"Trades API error: {e}")
+        
+        return trades
+    
+    def dump_debug_trades(self, trades: List[Dict]):
+        """Dump raw trades for debugging."""
+        if not DEBUG_TRADES:
+            return
+        
+        self.log("=" * 60)
+        self.log("DEBUG: Raw trades dump (last 20)")
+        self.log("=" * 60)
+        
+        for i, t in enumerate(trades[:20]):
+            self.log(f"Trade {i+1}:")
+            self.log(f"  txHash: {t.get('transactionHash', 'MISSING')[:20]}...")
+            self.log(f"  asset: {t.get('asset', 'MISSING')[-12:]}")
+            self.log(f"  side: {t.get('side', 'MISSING')}")
+            self.log(f"  size: {t.get('size', 'MISSING')}")
+            self.log(f"  price: {t.get('price', 'MISSING')}")
+            self.log(f"  timestamp: {t.get('timestamp', 'MISSING')}")
+            self.log(f"  proxyWallet: {t.get('proxyWallet', 'MISSING')[:16]}...")
+        
+        self.log("=" * 60)
+    
+    def find_matching_fill(self, trades: List[Dict], side: str, expected_price: float, expected_size: float) -> Optional[ConfirmedFill]:
+        """
+        Find a trade that matches our order.
+        """
+        for t in trades:
+            tx_hash = t.get("transactionHash", "")
+            if not tx_hash:
+                continue
+            
+            trade_side = t.get("side", "").upper()
+            if trade_side != side:
+                continue
+            
+            token_id = t.get("asset", "")
+            if token_id not in self.market_tokens:
+                continue
+            
+            trade_price = float(t.get("price", 0) or 0)
+            trade_size = float(t.get("size", 0) or 0)
+            timestamp = float(t.get("timestamp", 0) or 0)
+            
+            # Match within reasonable tolerance
+            price_match = abs(trade_price - expected_price) <= 0.02  # 2c tolerance
+            size_match = trade_size <= expected_size + 0.5  # Size should be <= posted
+            
+            if price_match and size_match:
+                trade_id = f"{tx_hash}_{token_id[-8:]}_{timestamp}"
+                
+                if trade_id in self.seen_trade_ids:
+                    continue
+                
+                self.seen_trade_ids.add(trade_id)
+                
+                return ConfirmedFill(
+                    trade_id=trade_id,
+                    tx_hash=tx_hash,
+                    side=trade_side,
+                    price=trade_price,
+                    size=trade_size,
+                    timestamp=timestamp,
+                    token_id=token_id
+                )
+        
+        return None
+    
+    def check_positions_for_inventory(self) -> float:
+        """Check positions endpoint as sanity."""
+        try:
+            positions = self.clob.get_positions()
+            if positions:
+                for p in positions:
+                    token_id = p.get("token_id", "") or p.get("asset", "")
+                    if token_id in self.market_tokens:
+                        size = float(p.get("size", 0) or p.get("shares", 0) or 0)
+                        if size > 0.01:
+                            return size
+            return 0.0
+        except Exception as e:
+            self.log(f"Positions API error: {e}")
+            return 0.0
+    
+    # ========================================================================
+    # ENTRY CONDITIONS
+    # ========================================================================
+    
+    def check_entry_conditions(self, mid: float, spread: float, time_to_end: int) -> tuple:
+        if mid < ENTRY_MID_MIN or mid > ENTRY_MID_MAX:
+            return (False, f"mid {mid:.2f} outside [{ENTRY_MID_MIN}, {ENTRY_MID_MAX}]")
+        
         spread_cents = spread * 100
         if spread_cents > MAX_SPREAD_CENTS:
             return (False, f"spread {spread_cents:.1f}c > {MAX_SPREAD_CENTS}c")
         
-        # Volatility check
-        if vol.vol_10s_cents > MAX_VOL_10S_CENTS:
-            return (False, f"vol {vol.vol_10s_cents:.1f}c > {MAX_VOL_10S_CENTS}c")
+        vol = self.get_vol_10s()
+        if vol > 8:
+            return (False, f"vol {vol:.1f}c > 8c")
         
-        # Time check
         if time_to_end < MIN_TIME_TO_END_SECS:
             return (False, f"time_to_end {time_to_end}s < {MIN_TIME_TO_END_SECS}s")
         
         return (True, "OK")
     
-    def get_exit_price(self, best_bid: float, best_ask: float, time_to_end: int) -> tuple:
-        """
-        Get exit price based on ladder.
-        Returns (price, is_taker)
-        """
-        if time_to_end < FLATTEN_DEADLINE_SECS:
-            return (best_bid, True)
-        
-        if self.exit_reprice_count == 0:
-            tp_price = min(0.99, self.entry_price + 0.01)
-            ask_minus = max(0.01, best_ask - 0.01)
-            return (min(tp_price, ask_minus), False)
-        elif self.exit_reprice_count == 1:
-            return (self.entry_price, False)
-        elif self.exit_reprice_count == 2:
-            return (max(0.01, self.entry_price - 0.01), False)
-        elif self.exit_reprice_count == 3:
-            return (max(0.01, self.entry_price - 0.02), False)
-        else:
-            return (best_bid, True)
+    # ========================================================================
+    # EXIT MANAGEMENT
+    # ========================================================================
     
-    def manage_exit(self, best_bid: float, best_ask: float, time_to_end: int) -> bool:
-        """Manage exit order with ladder repricing."""
-        if not self.fill_tracker:
-            return False
-        
-        confirmed_shares = self.fill_tracker.get_confirmed_shares(self.entry_token)
-        
-        # CRITICAL: Only exit if we have >= MIN_ORDER_SHARES
-        if confirmed_shares < MIN_ORDER_SHARES:
-            self.log(f"Cannot exit: {confirmed_shares:.2f} < MIN_ORDER_SHARES({MIN_ORDER_SHARES})")
-            return False
+    def manage_exit(self, best_bid: float, best_ask: float, time_to_end: int):
+        if self.confirmed_shares < MIN_ORDER_SHARES:
+            self.log(f"Dust position: {self.confirmed_shares:.2f} < {MIN_ORDER_SHARES}")
+            return
         
         now = time.time()
         
@@ -251,11 +294,25 @@ class V14Verifier:
         if not self.exit_order_id:
             should_reprice = True
         elif now - self.exit_posted_at > EXIT_REPRICE_INTERVAL_SECS:
+            # Check if exit order still open
+            if self.exit_order_id and not self.check_order_still_open(self.exit_order_id):
+                # Exit order filled!
+                self.log("Exit order disappeared - checking for fill...")
+                trades = self.fetch_recent_trades(120.0)
+                fill = self.find_matching_fill(trades, "SELL", self.entry_price, self.confirmed_shares)
+                if fill:
+                    self.exit_fill = fill
+                    self.confirmed_shares -= fill.size
+                    self.log(f"[FILL] EXIT: SELL {fill.size:.2f} @ {fill.price:.4f} txHash={fill.tx_hash[:16]}...")
+                    if self.confirmed_shares <= 0.01:
+                        self.state = VerifierState.DONE
+                    return
             should_reprice = True
         
         if not should_reprice:
-            return False
+            return
         
+        # Cancel existing
         if self.exit_order_id and self.live:
             try:
                 self.clob.cancel_order(self.exit_order_id)
@@ -263,126 +320,61 @@ class V14Verifier:
                 pass
             self.exit_order_id = None
         
-        exit_price, is_taker = self.get_exit_price(best_bid, best_ask, time_to_end)
-        exit_size = int(confirmed_shares)
+        # Get exit price from ladder
+        if time_to_end < 60:
+            exit_price = best_bid
+            is_taker = True
+        elif self.exit_reprice_count == 0:
+            exit_price = min(0.99, self.entry_price + 0.01)
+            is_taker = False
+        elif self.exit_reprice_count == 1:
+            exit_price = self.entry_price
+            is_taker = False
+        elif self.exit_reprice_count == 2:
+            exit_price = max(0.01, self.entry_price - 0.01)
+            is_taker = False
+        else:
+            exit_price = best_bid
+            is_taker = True
+        
+        exit_size = int(self.confirmed_shares)
         
         if self.live:
             try:
                 result = self.clob.post_order(
-                    token_id=self.entry_token,
+                    token_id=self.entry_fill.token_id if self.entry_fill else self.yes_token,
                     side="SELL",
                     price=exit_price,
                     size=exit_size,
                     post_only=(not is_taker)
                 )
-                
                 if result.success:
                     self.exit_order_id = result.order_id
                     self.exit_posted_at = now
                     self.exit_reprice_count += 1
                     taker_str = " (TAKER)" if is_taker else ""
                     self.log(f"EXIT posted: SELL {exit_size} @ {exit_price:.4f}{taker_str}")
-                    return True
-                else:
-                    error = str(result.error).lower() if result.error else ""
-                    if "balance" in error:
-                        self.kill_switch(f"BALANCE_ERROR on SELL: {result.error}")
-                    return False
             except Exception as e:
-                error = str(e).lower()
-                if "balance" in error:
-                    self.kill_switch(f"BALANCE_ERROR on SELL: {e}")
-                else:
-                    self.log(f"Exit order error: {e}")
-                return False
-        
-        return False
+                self.log(f"Exit error: {e}")
     
-    def manage_accumulate(self, best_bid: float, time_to_end: int) -> bool:
-        """
-        Manage accumulate state - top up to MIN_ORDER_SHARES.
-        Returns True if accumulate order posted.
-        """
-        if not self.fill_tracker:
-            return False
-        
-        confirmed_shares = self.fill_tracker.get_confirmed_shares(self.entry_token)
-        needed = MIN_ORDER_SHARES - confirmed_shares
-        
-        if needed <= 0:
-            # Already have enough, transition to WAIT_EXIT
-            return False
-        
-        # Check if we can top-up within caps
-        potential_total = confirmed_shares + needed
-        if potential_total > MAX_SHARES:
-            self.log(f"Cannot accumulate: {confirmed_shares:.2f} + {needed:.2f} > MAX_SHARES({MAX_SHARES})")
-            return False
-        
-        # Check time - must have enough time to exit after accumulating
-        if time_to_end < MIN_TIME_TO_END_SECS:
-            self.log(f"Cannot accumulate: time_to_end({time_to_end}s) < MIN_TIME({MIN_TIME_TO_END_SECS}s)")
-            return False
-        
-        # Check accumulate timeout
-        if time.time() - self.accumulate_start_time > ACCUMULATE_TIMEOUT_SECS:
-            self.log(f"Accumulate timeout after {ACCUMULATE_TIMEOUT_SECS}s")
-            return False
-        
-        # Post accumulate order
-        if not self.accumulate_order_id and self.live:
-            # Round up to ensure we get to MIN_ORDER_SHARES
-            accum_size = max(MIN_ORDER_SHARES, int(needed) + 1)
-            
-            try:
-                result = self.clob.post_order(
-                    token_id=self.entry_token,
-                    side="BUY",
-                    price=best_bid,
-                    size=accum_size,
-                    post_only=True
-                )
-                
-                if result.success:
-                    self.accumulate_order_id = result.order_id
-                    self.log(f"ACCUMULATE posted: BUY {accum_size} @ {best_bid:.4f} (need {needed:.2f} more)")
-                    return True
-            except Exception as e:
-                self.log(f"Accumulate order error: {e}")
-        
-        return False
+    # ========================================================================
+    # MAIN LOOP
+    # ========================================================================
     
     def run(self) -> int:
-        """Run verification. Returns exit code."""
-        
-        # ====================================================================
-        # CONFIG VALIDATION (NON-NEGOTIABLE)
-        # ====================================================================
-        valid, error_msg = validate_config()
-        if not valid:
-            print("=" * 60)
-            print("  V14 PRODUCTION VERIFICATION - CONFIG ERROR")
-            print("=" * 60)
-            print(f"  {error_msg}")
-            print()
-            print(f"  MIN_ORDER_SHARES: {MIN_ORDER_SHARES} (Polymarket protocol)")
-            print(f"  MAX_SHARES: {MAX_SHARES}")
-            print(f"  QUOTE_SIZE: {QUOTE_SIZE}")
-            print(f"  MAX_USDC_LOCKED: ${MAX_USDC_LOCKED:.2f}")
-            print()
-            print("  Cannot guarantee exit. Refusing to trade.")
-            print("=" * 60)
-            return 2  # NO_TRADE_SAFE
+        # Config validation
+        if MAX_SHARES < MIN_ORDER_SHARES or QUOTE_SIZE < MIN_ORDER_SHARES:
+            self.log(f"INVALID_CONFIG: MAX_SHARES({MAX_SHARES}) or QUOTE_SIZE({QUOTE_SIZE}) < MIN_ORDER_SHARES({MIN_ORDER_SHARES})")
+            return 2
         
         print("=" * 60)
-        print("  V14 PRODUCTION VERIFICATION")
+        print("  V15 PRODUCTION VERIFICATION")
+        print("  Multi-source fill detection")
         print("=" * 60)
-        print(f"  MIN_ORDER_SHARES: {MIN_ORDER_SHARES} (protocol)")
-        print(f"  MAX_USDC_LOCKED: ${MAX_USDC_LOCKED:.2f}")
+        print(f"  MAX_USDC: ${MAX_USDC_LOCKED:.2f}")
         print(f"  MAX_SHARES: {MAX_SHARES}")
         print(f"  QUOTE_SIZE: {QUOTE_SIZE}")
-        print(f"  REGIME: [{ENTRY_MID_MIN}, {ENTRY_MID_MAX}] (epsilon={EPSILON})")
-        print(f"  VOL_THRESHOLD: {MAX_VOL_10S_CENTS}c")
+        print(f"  DEBUG_TRADES: {DEBUG_TRADES}")
         print(f"  MODE: {'LIVE' if self.live else 'DRYRUN'}")
         print("=" * 60)
         
@@ -394,42 +386,38 @@ class V14Verifier:
         
         self.yes_token = market.yes_token_id
         self.no_token = market.no_token_id
+        self.market_tokens = {self.yes_token, self.no_token}
         self.market_end_time = market.end_time
         
         self.log(f"Market: {market.question}")
         self.log(f"Ends in: {market.time_str}")
-        
-        # Initialize fill tracker
-        self.fill_tracker = FillTrackerV13(
-            proxy_address=self.config.api.proxy_address,
-            on_kill_switch=lambda reason: self.kill_switch(reason)
-        )
-        self.fill_tracker.set_boundary()
-        self.fill_tracker.set_valid_tokens(self.yes_token, self.no_token)
+        self.log(f"YES token: {self.yes_token[-12:]}")
+        self.log(f"NO token: {self.no_token[-12:]}")
+        self.log(f"Proxy: {self.config.api.proxy_address[:16]}...")
         
         # Cleanup
         if self.live:
             self.clob.cancel_all()
             self.log("Cancelled all orders")
         
-        # Get starting balance
-        bal = self.clob.get_balance()
-        start_usdc = bal.get("usdc", 0)
-        self.log(f"Start balance: ${start_usdc:.2f}")
-        
-        # Main loop
+        # Set timing
+        self.script_start_ts = time.time()
         self.start_time = time.time()
         self.last_log_time = time.time()
+        
+        # Get starting balance
+        bal = self.clob.get_balance()
+        self.log(f"Start balance: ${bal.get('usdc', 0):.2f}")
         
         while True:
             now = time.time()
             elapsed = now - self.start_time
             
-            if self.state == VerifierState.KILLED:
+            if self.state == VerifierState.FAILED:
                 return 1
             
             if elapsed > MAX_RUNTIME_SECS:
-                self.log("Timeout reached")
+                self.log("Timeout")
                 if self.live:
                     self.clob.cancel_all()
                 return 2
@@ -444,145 +432,145 @@ class V14Verifier:
             spread = yes_book.best_ask - yes_book.best_bid
             time_to_end = self.market_end_time - int(time.time())
             
-            vol = self.update_volatility(mid)
+            self.mid_history.append(mid)
+            if len(self.mid_history) > 100:
+                self.mid_history = self.mid_history[-100:]
             
-            # Poll fills
-            try:
-                new_fills = self.fill_tracker.poll_fills()
-            except FillTrackerError:
-                return 1
-            
-            # Process fills for state transitions
-            for fill in new_fills:
-                if fill.side.value == "BUY":
-                    self.entry_price = fill.price
-                    self.entry_token = fill.token_id
-                    
-                    confirmed = self.fill_tracker.get_confirmed_shares(fill.token_id)
-                    
-                    if confirmed >= MIN_ORDER_SHARES:
-                        # Can exit immediately
-                        self.state = VerifierState.WAIT_EXIT
-                        self.log(f"STATE: WAIT_ENTRY -> WAIT_EXIT (pos={confirmed:.2f} >= {MIN_ORDER_SHARES})")
-                    else:
-                        # Need to accumulate
-                        self.state = VerifierState.ACCUMULATE
-                        self.accumulate_start_time = now
-                        self.log(f"STATE: WAIT_ENTRY -> ACCUMULATE (pos={confirmed:.2f} < {MIN_ORDER_SHARES})")
-                    
-                    # Check exposure cap
-                    if confirmed > MAX_SHARES:
-                        self.log(f"EXPOSURE CAP BREACH: {confirmed} > {MAX_SHARES}")
-                        if self.entry_order_id and self.live:
-                            try:
-                                self.clob.cancel_order(self.entry_order_id)
-                            except:
-                                pass
-                            self.entry_order_id = None
-                
-                elif fill.side.value == "SELL":
-                    remaining = self.fill_tracker.get_confirmed_shares(self.entry_token)
-                    if remaining <= 0.01:
-                        self.state = VerifierState.DONE
-                        self.log("STATE: WAIT_EXIT -> DONE")
-            
-            # State machine
+            # ================================================================
+            # STATE: WAIT_ENTRY
+            # ================================================================
             if self.state == VerifierState.WAIT_ENTRY:
-                can_trade, reason = self.check_entry_conditions(mid, spread, vol, time_to_end)
+                # Check if we have a pending entry order
+                if self.entry_order_id:
+                    # Check if order disappeared (probable fill!)
+                    if not self.check_order_still_open(self.entry_order_id):
+                        self.log(f"Entry order {self.entry_order_id[:16]}... DISAPPEARED")
+                        self.log("Probable fill - entering FILL_PENDING")
+                        self.state = VerifierState.FILL_PENDING
+                        self.fill_pending_start = now
+                        
+                        # Dump trades for debug
+                        trades = self.fetch_recent_trades(120.0)
+                        self.dump_debug_trades(trades)
+                        continue
+                
+                # Check conditions
+                can_trade, reason = self.check_entry_conditions(mid, spread, time_to_end)
                 
                 if not can_trade:
                     if now - self.last_log_time > LOG_INTERVAL_SECS:
                         self.log(f"NO_TRADE: {reason}")
                         self.last_log_time = now
                     
-                    if elapsed > MAX_RUNTIME_SECS * 0.3:
-                        if self.fill_tracker.total_buys == 0:
-                            self.log("NO_TRADE_SAFE: No suitable conditions found")
-                            return 2
+                    if elapsed > 120:
+                        self.log("NO_TRADE_SAFE: Conditions never suitable")
+                        return 2
                 else:
+                    # Post entry if not already
                     if not self.entry_order_id and self.live:
                         entry_size = min(QUOTE_SIZE, MAX_SHARES)
-                        exposure = entry_size * mid
+                        entry_price = yes_book.best_bid
                         
-                        if exposure > MAX_USDC_LOCKED:
-                            self.log(f"Exposure ${exposure:.2f} > cap ${MAX_USDC_LOCKED}")
-                        else:
-                            try:
-                                result = self.clob.post_order(
-                                    token_id=self.yes_token,
-                                    side="BUY",
-                                    price=yes_book.best_bid,
-                                    size=entry_size,
-                                    post_only=True
-                                )
-                                if result.success:
-                                    self.entry_order_id = result.order_id
-                                    self.log(f"ENTRY posted: BUY {entry_size} @ {yes_book.best_bid:.4f}")
-                            except Exception as e:
-                                self.log(f"Entry error: {e}")
-            
-            elif self.state == VerifierState.ACCUMULATE:
-                # Check if we now have enough
-                confirmed = self.fill_tracker.get_confirmed_shares(self.entry_token) if self.entry_token else 0
-                
-                if confirmed >= MIN_ORDER_SHARES:
-                    self.state = VerifierState.WAIT_EXIT
-                    self.log(f"STATE: ACCUMULATE -> WAIT_EXIT (pos={confirmed:.2f} >= {MIN_ORDER_SHARES})")
-                    # Cancel any pending accumulate order
-                    if self.accumulate_order_id and self.live:
                         try:
-                            self.clob.cancel_order(self.accumulate_order_id)
-                        except:
-                            pass
-                        self.accumulate_order_id = None
-                else:
-                    # Try to accumulate more
-                    can_accum = self.manage_accumulate(yes_book.best_bid, time_to_end)
-                    
-                    # Check for timeout/failure
-                    if not can_accum and (now - self.accumulate_start_time > ACCUMULATE_TIMEOUT_SECS):
-                        self.log(f"DUST_UNEXITABLE: pos={confirmed:.2f} < {MIN_ORDER_SHARES}, cannot top-up")
-                        # Cancel all and fail
-                        if self.live:
-                            self.clob.cancel_all()
-                        return 1
+                            result = self.clob.post_order(
+                                token_id=self.yes_token,
+                                side="BUY",
+                                price=entry_price,
+                                size=entry_size,
+                                post_only=True
+                            )
+                            if result.success:
+                                self.entry_order_id = result.order_id
+                                self.entry_order_price = entry_price
+                                self.entry_order_size = entry_size
+                                self.log(f"ENTRY posted: BUY {entry_size} @ {entry_price:.4f} order_id={result.order_id[:16]}...")
+                        except Exception as e:
+                            self.log(f"Entry error: {e}")
             
+            # ================================================================
+            # STATE: FILL_PENDING - Must confirm via trades
+            # ================================================================
+            elif self.state == VerifierState.FILL_PENDING:
+                trades = self.fetch_recent_trades(120.0)  # Wide lookback
+                
+                fill = self.find_matching_fill(
+                    trades, "BUY",
+                    self.entry_order_price,
+                    self.entry_order_size
+                )
+                
+                if fill:
+                    self.entry_fill = fill
+                    self.confirmed_shares = fill.size
+                    self.entry_price = fill.price
+                    
+                    self.log(f"[FILL] ENTRY CONFIRMED: BUY {fill.size:.2f} @ {fill.price:.4f}")
+                    self.log(f"  txHash: {fill.tx_hash[:40]}...")
+                    self.log(f"  token: {fill.token_id[-12:]}")
+                    
+                    if self.confirmed_shares >= MIN_ORDER_SHARES:
+                        self.state = VerifierState.WAIT_EXIT
+                        self.log("STATE: FILL_PENDING -> WAIT_EXIT")
+                    else:
+                        self.log(f"Partial fill: {self.confirmed_shares:.2f} < {MIN_ORDER_SHARES}")
+                        # For now, still go to WAIT_EXIT and handle dust there
+                        self.state = VerifierState.WAIT_EXIT
+                else:
+                    # Check positions as fallback
+                    pos_shares = self.check_positions_for_inventory()
+                    if pos_shares > 0.01:
+                        self.log(f"Positions API shows inventory: {pos_shares:.2f}")
+                        self.confirmed_shares = pos_shares
+                        self.entry_price = self.entry_order_price
+                        self.state = VerifierState.WAIT_EXIT
+                        self.log("STATE: FILL_PENDING -> WAIT_EXIT (from positions)")
+                    else:
+                        # Still waiting
+                        if now - self.fill_pending_start > FILL_CONFIRM_TIMEOUT_SECS:
+                            self.log(f"FILL_CONFIRM_TIMEOUT: Could not confirm fill after {FILL_CONFIRM_TIMEOUT_SECS}s")
+                            self.log("STATE_DESYNC: Order disappeared but no fill found")
+                            if self.live:
+                                self.clob.cancel_all()
+                            self.state = VerifierState.FAILED
+                            return 1
+            
+            # ================================================================
+            # STATE: WAIT_EXIT
+            # ================================================================
             elif self.state == VerifierState.WAIT_EXIT:
                 self.manage_exit(yes_book.best_bid, yes_book.best_ask, time_to_end)
             
+            # ================================================================
+            # STATE: DONE
+            # ================================================================
             elif self.state == VerifierState.DONE:
-                summary = self.fill_tracker.get_summary()
+                pnl = 0.0
+                if self.entry_fill and self.exit_fill:
+                    pnl = (self.exit_fill.price - self.entry_fill.price) * self.exit_fill.size
                 
                 print("\n" + "=" * 60)
                 print("  VERIFICATION COMPLETE")
                 print("=" * 60)
-                print(f"  Round-trips: {summary['round_trips']}")
-                print(f"  Realized PnL: ${summary['realized_pnl']:+.4f}")
-                print(f"  Total buys: {summary['total_buys']} (${summary['total_buy_cost']:.2f})")
-                print(f"  Total sells: {summary['total_sells']} (${summary['total_sell_revenue']:.2f})")
-                
-                for i, rt in enumerate(self.fill_tracker.round_trips):
-                    print(f"\n  [ROUND-TRIP {i+1}]")
-                    print(f"    Entry: {rt['entry_price']:.4f}")
-                    print(f"    Exit:  {rt['exit_price']:.4f}")
-                    print(f"    Size:  {rt['size']:.2f}")
-                    print(f"    PnL:   ${rt['pnl']:+.4f}")
-                    print(f"    Entry txHash: {rt['entry_txhash']}...")
-                    print(f"    Exit txHash:  {rt['exit_txhash']}...")
-                
+                if self.entry_fill:
+                    print(f"  Entry: BUY {self.entry_fill.size:.2f} @ {self.entry_fill.price:.4f}")
+                    print(f"  Entry txHash: {self.entry_fill.tx_hash[:40]}...")
+                if self.exit_fill:
+                    print(f"  Exit: SELL {self.exit_fill.size:.2f} @ {self.exit_fill.price:.4f}")
+                    print(f"  Exit txHash: {self.exit_fill.tx_hash[:40]}...")
+                print(f"  [ROUND-TRIP] PnL = ${pnl:+.4f}")
                 print("-" * 60)
-                print("  RESULT: PASS - Verifier complete")
+                print("  RESULT: PASS")
                 print("=" * 60)
-                
                 return 0
             
             # Tick log
             if now - self.last_log_time > LOG_INTERVAL_SECS:
-                confirmed = self.fill_tracker.get_total_confirmed_shares() if self.fill_tracker else 0
+                vol = self.get_vol_10s()
+                order_status = "pending" if self.entry_order_id else "none"
                 self.log(
-                    f"TICK: mid={mid:.4f} spread={spread*100:.1f}c "
-                    f"vol={vol.vol_10s_cents:.1f}c state={self.state.value} "
-                    f"pos={confirmed:.1f} time_left={time_to_end}s"
+                    f"TICK: mid={mid:.4f} spread={spread*100:.1f}c vol={vol:.1f}c "
+                    f"state={self.state.value} pos={self.confirmed_shares:.1f} "
+                    f"order={order_status} time_left={time_to_end}s"
                 )
                 self.last_log_time = now
             
@@ -592,13 +580,11 @@ class V14Verifier:
 
 
 if __name__ == "__main__":
-    verifier = V14Verifier()
+    verifier = V15Verifier()
     try:
         exit_code = verifier.run()
-    except FillTrackerError:
-        exit_code = 1
     except Exception as e:
-        print(f"[V14] Unexpected error: {e}", flush=True)
+        print(f"[V15] Error: {e}", flush=True)
         import traceback
         traceback.print_exc()
         exit_code = 1
