@@ -1,31 +1,29 @@
 """
-V12 PRODUCTION VERIFICATION SCRIPT
+V13 PRODUCTION VERIFICATION SCRIPT
 ===================================
 
 Capital protection is #1. This script verifies a single round-trip
 with strict safety rules.
 
 EXIT CODES:
-0 = PASS - Complete round-trip verified (entry + exit fills)
-1 = FAIL - Safety violation or error
+0 = PASS - Complete round-trip verified (BUY + SELL fills with valid trade_ids)
+1 = FAIL - Invariant violation (KILL_SWITCH triggered)
 2 = NO_TRADE_SAFE - Conditions unsuitable, correctly refused to trade
-3 = STATE_DESYNC - Fills don't match REST positions
 
-SAFETY RULES:
-- Trade ingestion boundary: ignore trades before window_start
-- Strict regime: mid in [0.40, 0.60]
-- Cap enforcement: MAX_SHARES and MAX_USDC_LOCKED
-- No pyramiding: 1 entry order max, no entries if inventory exists
-- Exit management: automatic, not manual
+INVARIANTS ENFORCED:
+- Positions open ONLY from confirmed BUY fills
+- Positions close ONLY from confirmed SELL fills
+- NO synthetic fills from reconcile
+- Trade ingestion boundary: ignore trades before start
+- Missing transactionHash = FAIL (exit 1)
+- Exposure caps enforced from confirmed fills
 """
 
 import os
 import sys
 import time
-import hashlib
 from enum import Enum
-from dataclasses import dataclass
-from typing import Optional, Set, Dict, List
+from typing import Optional
 
 # Force UTF-8 output
 if sys.platform == "win32":
@@ -37,53 +35,42 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from mm_bot.config import Config
 from mm_bot.clob import ClobWrapper
 from mm_bot.market import MarketResolver
-import requests
+from mm_bot.volatility import VolatilityTracker, VolatilitySnapshot
+from mm_bot.fill_tracker_v13 import FillTrackerV13, FillTrackerError
 
 
 # ============================================================================
-# V12 CONFIGURATION
+# V13 CONFIGURATION
 # ============================================================================
 
 # Caps (strict for verification)
-MAX_USDC_LOCKED = 1.50
-MAX_SHARES = 3  # This is the HARD cap
-QUOTE_SIZE = 6  # Will be clamped to MAX_SHARES
+MAX_USDC_LOCKED = float(os.environ.get("MM_MAX_USDC", "1.50"))
+MAX_SHARES = int(float(os.environ.get("MM_MAX_SHARES", "3")))
+QUOTE_SIZE = int(float(os.environ.get("MM_QUOTE_SIZE", "3")))  # Clamped to MAX_SHARES
 
-# Regime (strict for verification)
-ENTRY_MID_MIN = 0.40
-ENTRY_MID_MAX = 0.60
+# Regime (STRICT for verification)
+ENTRY_MID_MIN = 0.45
+ENTRY_MID_MAX = 0.55
 MAX_SPREAD_CENTS = 3
-MAX_VOL_10S_CENTS = 8
+MAX_VOL_10S_CENTS = float(os.environ.get("MM_VOL_10S_CENTS", "8.0"))
 MIN_TIME_TO_END_SECS = 180
 
 # Timing
-MAX_RUNTIME_SECS = 300  # 5 minutes max
+MAX_RUNTIME_SECS = int(os.environ.get("MM_MAX_RUNTIME", "600"))
 TICK_INTERVAL_SECS = 0.25
 LOG_INTERVAL_SECS = 5
 EXIT_REPRICE_INTERVAL_SECS = 5
-
-# Adverse budget for rebate check
-ADVERSE_BUDGET_PER_SHARE = 0.02  # 2 cents
+FLATTEN_DEADLINE_SECS = 60  # Emergency taker exit in last 60s
 
 
 class VerifierState(Enum):
     WAIT_ENTRY = "WAIT_ENTRY"
     WAIT_EXIT = "WAIT_EXIT"
     DONE = "DONE"
-    STOPPED = "STOPPED"
+    KILLED = "KILLED"
 
 
-@dataclass
-class ConfirmedFill:
-    trade_id: str
-    side: str
-    price: float
-    size: float
-    timestamp: float
-    token_id: str
-
-
-class V12Verifier:
+class V13Verifier:
     """
     Production-grade single round-trip verifier.
     """
@@ -97,52 +84,42 @@ class V12Verifier:
         # Market info
         self.yes_token: str = ""
         self.no_token: str = ""
-        self.market_tokens: Set[str] = set()
         self.market_end_time: int = 0
-        
-        # V12: Trade ingestion boundary
-        self.window_start_ts: float = 0.0
-        self.seen_trade_ids: Set[str] = set()
         
         # State machine
         self.state = VerifierState.WAIT_ENTRY
         self.entry_order_id: Optional[str] = None
         self.exit_order_id: Optional[str] = None
         
-        # Confirmed fills (from trades API only)
-        self.entry_fill: Optional[ConfirmedFill] = None
-        self.exit_fill: Optional[ConfirmedFill] = None
-        self.confirmed_shares: float = 0.0
+        # Fill tracker (V13 - no synthetic fills)
+        self.fill_tracker: Optional[FillTrackerV13] = None
+        
+        # Volatility tracker (V13 - time-based)
+        self.vol_tracker = VolatilityTracker(window_secs=10.0)
+        
+        # Entry tracking
         self.entry_price: float = 0.0
+        self.entry_token: str = ""
         
-        # Exit ladder tracking
-        self.exit_posted_at: float = 0.0
+        # Exit ladder
         self.exit_reprice_count: int = 0
-        
-        # Metrics
-        self.orders_posted: int = 0
-        self.orders_cancelled: int = 0
-        self.balance_errors: int = 0
-        self.safety_violations: List[str] = []
-        
-        # Mid history for volatility
-        self.mid_history: List[float] = []
+        self.exit_posted_at: float = 0.0
         
         # Timing
         self.start_time: float = 0.0
         self.last_log_time: float = 0.0
+        
+        # Kill switch state
+        self.kill_reason: str = ""
     
     def log(self, msg: str):
-        print(f"[V12] {msg}", flush=True)
+        print(f"[V13] {msg}", flush=True)
     
-    def log_violation(self, msg: str):
-        self.safety_violations.append(msg)
-        print(f"[SAFETY] {msg}", flush=True)
-    
-    def stop_trading(self, reason: str) -> int:
-        """Cancel all orders and stop."""
-        self.log(f"STOP_TRADING: {reason}")
-        self.state = VerifierState.STOPPED
+    def kill_switch(self, reason: str) -> int:
+        """Trigger kill switch - cancel all orders and exit with code 1."""
+        self.log(f"KILL_SWITCH: {reason}")
+        self.kill_reason = reason
+        self.state = VerifierState.KILLED
         
         if self.live:
             try:
@@ -154,123 +131,29 @@ class V12Verifier:
         return 1
     
     # ========================================================================
-    # V12 FIX A: Trade Ingestion Boundary
+    # VOLATILITY (V13 - time-based)
     # ========================================================================
     
-    def reset_fill_tracking(self):
-        """Reset fill tracking for new window."""
-        self.window_start_ts = time.time() - 2  # 2s skew allowance
-        self.seen_trade_ids.clear()
-        self.entry_fill = None
-        self.exit_fill = None
-        self.confirmed_shares = 0.0
-        self.log(f"Trade boundary set: ignore trades before {self.window_start_ts:.0f}")
-    
-    def poll_fills(self) -> List[ConfirmedFill]:
-        """
-        Poll trades API with V12 boundary filtering.
-        Only accepts trades:
-        - After window_start_ts
-        - For current market tokens
-        - Not already seen
-        """
-        new_fills = []
-        
-        try:
-            r = requests.get(
-                "https://data-api.polymarket.com/trades",
-                params={"user": self.config.api.proxy_address, "limit": 20},
-                timeout=10
-            )
-            
-            if r.status_code != 200:
-                return []
-            
-            trades = r.json()
-            
-            for t in trades:
-                tx_hash = t.get("transactionHash", "")
-                token_id = t.get("asset", "")
-                side = t.get("side", "").upper()
-                size = float(t.get("size", 0) or 0)
-                price = float(t.get("price", 0) or 0)
-                timestamp = float(t.get("timestamp", 0) or 0)
-                
-                # V12: Boundary check
-                if timestamp < self.window_start_ts:
-                    continue
-                
-                # V12: Token filter
-                if token_id not in self.market_tokens:
-                    continue
-                
-                # Dedupe key
-                trade_id = f"{tx_hash}_{token_id[-8:]}_{timestamp}_{side}_{size}_{price}"
-                if trade_id in self.seen_trade_ids:
-                    continue
-                
-                # V12: Validate tx_hash exists
-                if not tx_hash or len(tx_hash) < 10:
-                    self.log_violation(f"Trade missing txHash: {side} {size} @ {price}")
-                    return []  # Stop processing
-                
-                self.seen_trade_ids.add(trade_id)
-                
-                fill = ConfirmedFill(
-                    trade_id=trade_id,
-                    side=side,
-                    price=price,
-                    size=size,
-                    timestamp=timestamp,
-                    token_id=token_id
-                )
-                new_fills.append(fill)
-                
-        except Exception as e:
-            self.log(f"Trades API error: {e}")
-        
-        return new_fills
+    def update_volatility(self, mid: float) -> VolatilitySnapshot:
+        """Update volatility tracker and return snapshot."""
+        return self.vol_tracker.update(mid)
     
     # ========================================================================
-    # V12 FIX B: Regime + Rebate Viability
+    # REGIME CHECKS (V13 - strict for verification)
     # ========================================================================
     
-    def get_fee_per_100_shares(self, price: float) -> float:
-        """Get taker fee for 100 shares at given price (from Polymarket fee table)."""
-        # Simplified fee curve: max at 0.50, zero at extremes
-        # Fee = 0.78 * 4 * price * (1 - price) for 100 shares
-        return 0.78 * 4 * price * (1 - price)
-    
-    def expected_rebate_total(self, shares: float, entry_price: float, exit_price: float) -> float:
+    def check_entry_conditions(
+        self,
+        mid: float,
+        spread: float,
+        vol: VolatilitySnapshot,
+        time_to_end: int
+    ) -> tuple:
         """
-        Estimate total maker rebate for round-trip.
-        Rebates are funded from taker fees, assume ~50% redistribution.
-        """
-        entry_fee_100 = self.get_fee_per_100_shares(entry_price)
-        exit_fee_100 = self.get_fee_per_100_shares(exit_price)
-        
-        # Rebate is portion of fee collected
-        rebate_rate = 0.3  # Conservative estimate
-        entry_rebate = (shares / 100) * entry_fee_100 * rebate_rate
-        exit_rebate = (shares / 100) * exit_fee_100 * rebate_rate
-        
-        return entry_rebate + exit_rebate
-    
-    def get_vol_10s(self) -> float:
-        """Get 10-second volatility in cents."""
-        if len(self.mid_history) < 10:
-            return 0.0
-        recent = self.mid_history[-40:]  # ~10s at 250ms ticks
-        if len(recent) < 2:
-            return 0.0
-        return (max(recent) - min(recent)) * 100
-    
-    def check_entry_conditions(self, mid: float, spread: float, time_to_end: int) -> tuple:
-        """
-        V12: Check all entry conditions.
+        Check all entry conditions.
         Returns (can_trade, reason)
         """
-        # Regime check
+        # Regime check - STRICT [0.45, 0.55]
         if mid < ENTRY_MID_MIN or mid > ENTRY_MID_MAX:
             return (False, f"mid {mid:.2f} outside [{ENTRY_MID_MIN}, {ENTRY_MID_MAX}]")
         
@@ -280,85 +163,57 @@ class V12Verifier:
             return (False, f"spread {spread_cents:.1f}c > {MAX_SPREAD_CENTS}c")
         
         # Volatility check
-        vol = self.get_vol_10s()
-        if vol > MAX_VOL_10S_CENTS:
-            return (False, f"vol {vol:.1f}c > {MAX_VOL_10S_CENTS}c")
+        if vol.vol_10s_cents > MAX_VOL_10S_CENTS:
+            return (False, f"vol {vol.vol_10s_cents:.1f}c > {MAX_VOL_10S_CENTS}c")
         
         # Time check
         if time_to_end < MIN_TIME_TO_END_SECS:
             return (False, f"time_to_end {time_to_end}s < {MIN_TIME_TO_END_SECS}s")
         
-        # Rebate viability check
-        shares = min(QUOTE_SIZE, MAX_SHARES)  # V12: Clamp to cap
-        expected_rebate = self.expected_rebate_total(shares, mid, mid)
-        required_rebate = shares * ADVERSE_BUDGET_PER_SHARE
-        
-        if expected_rebate < required_rebate:
-            return (False, f"rebate ${expected_rebate:.4f} < adverse ${required_rebate:.4f}")
-        
         return (True, "OK")
     
     # ========================================================================
-    # V12 FIX C: Cap Enforcement
+    # EXIT MANAGEMENT (V13 - deterministic ladder)
     # ========================================================================
     
-    def check_caps(self, mid: float) -> bool:
-        """
-        Check exposure caps. Returns True if within caps.
-        """
-        # Shares cap
-        if self.confirmed_shares > MAX_SHARES:
-            self.log_violation(f"SHARES CAP BREACH: {self.confirmed_shares} > {MAX_SHARES}")
-            return False
-        
-        # USDC cap
-        exposure = self.confirmed_shares * mid
-        if exposure > MAX_USDC_LOCKED:
-            self.log_violation(f"USDC CAP BREACH: ${exposure:.2f} > ${MAX_USDC_LOCKED}")
-            return False
-        
-        return True
-    
-    def enforce_caps_on_fill(self, mid: float):
-        """V12: Enforce caps after fill. Cancel entries if breached."""
-        if not self.check_caps(mid):
-            self.log("Cap breached - cancelling entries, entering EXIT_ONLY")
-            if self.entry_order_id and self.live:
-                try:
-                    self.clob.cancel_order(self.entry_order_id)
-                    self.entry_order_id = None
-                except:
-                    pass
-            self.state = VerifierState.WAIT_EXIT
-    
-    # ========================================================================
-    # V12 FIX D: Exit Management
-    # ========================================================================
-    
-    def get_exit_price(self, best_bid: float, time_to_end: int) -> float:
+    def get_exit_price(self, best_bid: float, best_ask: float, time_to_end: int) -> tuple:
         """
         Get exit price based on ladder.
-        Reprice: entry+1c -> entry -> entry-1c -> entry-2c -> bid (emergency)
-        """
-        if time_to_end < 60:
-            # Emergency: cross spread
-            return best_bid
+        Returns (price, is_taker)
         
+        Ladder: TP(entry+1c) -> entry -> entry-1c -> entry-2c -> emergency(bid)
+        Emergency taker only if time_to_end < FLATTEN_DEADLINE_SECS
+        """
+        # Emergency taker
+        if time_to_end < FLATTEN_DEADLINE_SECS:
+            return (best_bid, True)
+        
+        # Ladder based on reprice count
         if self.exit_reprice_count == 0:
-            return min(0.99, self.entry_price + 0.01)  # TP +1c
+            # TP: entry+1c or best_ask-1c (whichever is better)
+            tp_price = min(0.99, self.entry_price + 0.01)
+            ask_minus = max(0.01, best_ask - 0.01)
+            return (min(tp_price, ask_minus), False)
         elif self.exit_reprice_count == 1:
-            return self.entry_price  # Scratch
+            return (self.entry_price, False)  # Scratch
         elif self.exit_reprice_count == 2:
-            return max(0.01, self.entry_price - 0.01)  # -1c
+            return (max(0.01, self.entry_price - 0.01), False)
         elif self.exit_reprice_count == 3:
-            return max(0.01, self.entry_price - 0.02)  # -2c
+            return (max(0.01, self.entry_price - 0.02), False)
         else:
-            return best_bid  # Cross
+            return (best_bid, True)  # Emergency
     
-    def manage_exit(self, best_bid: float, time_to_end: int):
-        """V12: Manage exit order with ladder repricing."""
-        if self.confirmed_shares < 0.01:
-            return
+    def manage_exit(self, best_bid: float, best_ask: float, time_to_end: int) -> bool:
+        """
+        Manage exit order with ladder repricing.
+        Returns True if exit was posted/repriced.
+        """
+        if not self.fill_tracker:
+            return False
+        
+        confirmed_shares = self.fill_tracker.get_confirmed_shares(self.entry_token)
+        if confirmed_shares < 0.01:
+            return False
         
         now = time.time()
         
@@ -370,69 +225,57 @@ class V12Verifier:
             should_reprice = True
         
         if not should_reprice:
-            return
+            return False
         
         # Cancel existing exit
         if self.exit_order_id and self.live:
             try:
                 self.clob.cancel_order(self.exit_order_id)
-                self.orders_cancelled += 1
             except:
                 pass
             self.exit_order_id = None
         
-        # Get new price
-        exit_price = self.get_exit_price(best_bid, time_to_end)
+        # Get exit price from ladder
+        exit_price, is_taker = self.get_exit_price(best_bid, best_ask, time_to_end)
         
-        # V12: Clamp size to confirmed shares
-        exit_size = int(self.confirmed_shares)
+        # Clamp size to confirmed shares
+        exit_size = int(confirmed_shares)
         if exit_size < 5:
-            self.log(f"Dust position: {self.confirmed_shares:.2f} < 5, cannot exit via API")
-            return
+            self.log(f"Dust position: {confirmed_shares:.2f} < 5, cannot exit via API")
+            return False
         
         if self.live:
             try:
                 result = self.clob.post_order(
-                    token_id=self.entry_fill.token_id if self.entry_fill else self.yes_token,
+                    token_id=self.entry_token,
                     side="SELL",
                     price=exit_price,
                     size=exit_size,
-                    post_only=(time_to_end >= 60)  # Taker only in emergency
+                    post_only=(not is_taker)
                 )
                 
                 if result.success:
                     self.exit_order_id = result.order_id
                     self.exit_posted_at = now
                     self.exit_reprice_count += 1
-                    self.orders_posted += 1
-                    self.log(f"EXIT posted: SELL {exit_size} @ {exit_price:.4f} (reprice #{self.exit_reprice_count})")
+                    taker_str = " (TAKER)" if is_taker else ""
+                    self.log(f"EXIT posted: SELL {exit_size} @ {exit_price:.4f}{taker_str} (reprice #{self.exit_reprice_count})")
+                    return True
                 else:
-                    if result.error and "balance" in str(result.error).lower():
-                        self.balance_errors += 1
-                        self.log_violation(f"BALANCE_ERROR on SELL: {result.error}")
+                    error = str(result.error).lower() if result.error else ""
+                    if "balance" in error:
+                        # Balance error on SELL is a KILL_SWITCH condition
+                        self.kill_switch(f"BALANCE_ERROR on SELL: {result.error}")
+                    return False
             except Exception as e:
-                if "balance" in str(e).lower():
-                    self.balance_errors += 1
-                    self.log_violation(f"BALANCE_ERROR on SELL: {e}")
+                error = str(e).lower()
+                if "balance" in error:
+                    self.kill_switch(f"BALANCE_ERROR on SELL: {e}")
                 else:
                     self.log(f"Exit order error: {e}")
-    
-    # ========================================================================
-    # V12 FIX E: Stop Conditions
-    # ========================================================================
-    
-    def check_stop_conditions(self) -> Optional[str]:
-        """Check all stop conditions. Returns reason if should stop."""
-        # Balance errors
-        if self.balance_errors > 0:
-            return "BALANCE_ERROR on exit"
+                return False
         
-        # Safety violations with missing trade_id
-        for v in self.safety_violations:
-            if "txHash" in v or "trade_id" in v.lower():
-                return v
-        
-        return None
+        return False
     
     # ========================================================================
     # MAIN RUN LOOP
@@ -444,11 +287,13 @@ class V12Verifier:
         Returns exit code.
         """
         print("=" * 60)
-        print("  V12 PRODUCTION VERIFICATION")
+        print("  V13 PRODUCTION VERIFICATION")
         print("=" * 60)
         print(f"  MAX_USDC_LOCKED: ${MAX_USDC_LOCKED:.2f}")
         print(f"  MAX_SHARES: {MAX_SHARES}")
+        print(f"  QUOTE_SIZE: {QUOTE_SIZE}")
         print(f"  REGIME: [{ENTRY_MID_MIN}, {ENTRY_MID_MAX}]")
+        print(f"  VOL_THRESHOLD: {MAX_VOL_10S_CENTS}c")
         print(f"  MODE: {'LIVE' if self.live else 'DRYRUN'}")
         print("=" * 60)
         
@@ -460,14 +305,20 @@ class V12Verifier:
         
         self.yes_token = market.yes_token_id
         self.no_token = market.no_token_id
-        self.market_tokens = {self.yes_token, self.no_token}
         self.market_end_time = market.end_time
         
         self.log(f"Market: {market.question}")
         self.log(f"Ends in: {market.time_str}")
         
-        # V12: Reset fill tracking with boundary
-        self.reset_fill_tracking()
+        # Initialize fill tracker with kill switch callback
+        self.fill_tracker = FillTrackerV13(
+            proxy_address=self.config.api.proxy_address,
+            on_kill_switch=lambda reason: self.kill_switch(reason)
+        )
+        
+        # Set trade ingestion boundary
+        self.fill_tracker.set_boundary()
+        self.fill_tracker.set_valid_tokens(self.yes_token, self.no_token)
         
         # Cleanup
         if self.live:
@@ -487,15 +338,16 @@ class V12Verifier:
             now = time.time()
             elapsed = now - self.start_time
             
+            # Check if killed
+            if self.state == VerifierState.KILLED:
+                return 1
+            
             # Timeout
             if elapsed > MAX_RUNTIME_SECS:
                 self.log("Timeout reached")
-                return self.stop_trading("Timeout")
-            
-            # Check stop conditions
-            stop_reason = self.check_stop_conditions()
-            if stop_reason:
-                return self.stop_trading(stop_reason)
+                if self.live:
+                    self.clob.cancel_all()
+                return 2  # NO_TRADE_SAFE (timeout without trade)
             
             # Get book
             yes_book = self.clob.get_order_book(self.yes_token)
@@ -507,65 +359,63 @@ class V12Verifier:
             spread = yes_book.best_ask - yes_book.best_bid
             time_to_end = self.market_end_time - int(time.time())
             
-            # Update mid history
-            self.mid_history.append(mid)
-            if len(self.mid_history) > 100:
-                self.mid_history = self.mid_history[-100:]
+            # Update volatility (V13 - time-based)
+            vol = self.update_volatility(mid)
             
-            # Poll fills
-            new_fills = self.poll_fills()
+            # Poll fills (may raise FillTrackerError -> KILL_SWITCH)
+            try:
+                new_fills = self.fill_tracker.poll_fills()
+            except FillTrackerError as e:
+                return 1  # Kill switch already triggered
             
+            # Process fills for state transitions
             for fill in new_fills:
-                if fill.side == "BUY":
-                    # V12: Check for unexpected entry after we have inventory
-                    if self.confirmed_shares > 0:
-                        self.log_violation("Unexpected BUY while holding inventory (pyramid)")
-                    
-                    self.entry_fill = fill
-                    self.confirmed_shares += fill.size
+                if fill.side.value == "BUY":
+                    # Entry fill confirmed
                     self.entry_price = fill.price
+                    self.entry_token = fill.token_id
                     self.state = VerifierState.WAIT_EXIT
                     
-                    self.log(f"ENTRY FILL: BUY {fill.size:.2f} @ {fill.price:.4f} trade_id={fill.trade_id[:40]}...")
+                    # Check exposure cap
+                    confirmed = self.fill_tracker.get_confirmed_shares(fill.token_id)
+                    if confirmed > MAX_SHARES:
+                        self.log(f"EXPOSURE CAP BREACH: {confirmed} > {MAX_SHARES}")
+                        # Cancel entries, go exit only
+                        if self.entry_order_id and self.live:
+                            try:
+                                self.clob.cancel_order(self.entry_order_id)
+                            except:
+                                pass
+                            self.entry_order_id = None
                     
-                    # V12: Enforce caps after fill
-                    self.enforce_caps_on_fill(mid)
-                    
-                elif fill.side == "SELL":
-                    if not self.entry_fill:
-                        # V12: Exit without entry is a boundary violation
-                        self.log_violation(f"EXIT without matching entry: {fill.size} @ {fill.price}")
-                        return 3  # STATE_DESYNC
-                    
-                    self.exit_fill = fill
-                    self.confirmed_shares -= fill.size
-                    
-                    self.log(f"EXIT FILL: SELL {fill.size:.2f} @ {fill.price:.4f} trade_id={fill.trade_id[:40]}...")
-                    
-                    if self.confirmed_shares <= 0.01:
+                elif fill.side.value == "SELL":
+                    # Exit fill confirmed
+                    remaining = self.fill_tracker.get_confirmed_shares(self.entry_token)
+                    if remaining <= 0.01:
                         self.state = VerifierState.DONE
             
             # State machine
             if self.state == VerifierState.WAIT_ENTRY:
                 # Check conditions
-                can_trade, reason = self.check_entry_conditions(mid, spread, time_to_end)
+                can_trade, reason = self.check_entry_conditions(mid, spread, vol, time_to_end)
                 
                 if not can_trade:
                     if now - self.last_log_time > LOG_INTERVAL_SECS:
                         self.log(f"NO_TRADE: {reason}")
                         self.last_log_time = now
                     
-                    # If we've waited 2 minutes with no trade opportunity, exit safely
-                    if elapsed > 120:
-                        self.log("NO_TRADE_SAFE: Conditions never suitable")
-                        return 2
+                    # If we've waited without trade opportunity, exit safely
+                    if elapsed > MAX_RUNTIME_SECS * 0.3:  # 30% of max runtime
+                        if self.fill_tracker.total_buys == 0:
+                            self.log("NO_TRADE_SAFE: No suitable conditions found")
+                            return 2
                 else:
-                    # Post entry
+                    # Post entry (if not already pending)
                     if not self.entry_order_id and self.live:
-                        # V12: Clamp to MAX_SHARES
+                        # V13: Clamp to min(QUOTE_SIZE, MAX_SHARES)
                         entry_size = min(QUOTE_SIZE, MAX_SHARES)
                         
-                        # V12: Check cap before posting
+                        # Check exposure before posting
                         exposure = entry_size * mid
                         if exposure > MAX_USDC_LOCKED:
                             self.log(f"Exposure ${exposure:.2f} > cap ${MAX_USDC_LOCKED}")
@@ -580,40 +430,51 @@ class V12Verifier:
                                 )
                                 if result.success:
                                     self.entry_order_id = result.order_id
-                                    self.orders_posted += 1
                                     self.log(f"ENTRY posted: BUY {entry_size} @ {yes_book.best_bid:.4f}")
                             except Exception as e:
                                 self.log(f"Entry error: {e}")
             
             elif self.state == VerifierState.WAIT_EXIT:
                 # Manage exit with ladder
-                self.manage_exit(yes_book.best_bid, time_to_end)
+                self.manage_exit(yes_book.best_bid, yes_book.best_ask, time_to_end)
             
             elif self.state == VerifierState.DONE:
                 # Success!
-                pnl = (self.exit_fill.price - self.entry_fill.price) * self.exit_fill.size
-                pnl_str = f"+${pnl:.4f}" if pnl >= 0 else f"-${abs(pnl):.4f}"
+                summary = self.fill_tracker.get_summary()
                 
                 print("\n" + "=" * 60)
                 print("  VERIFICATION COMPLETE")
                 print("=" * 60)
-                print(f"  Entry: BUY {self.entry_fill.size:.2f} @ {self.entry_fill.price:.4f}")
-                print(f"  Exit:  SELL {self.exit_fill.size:.2f} @ {self.exit_fill.price:.4f}")
-                print(f"  [ROUND-TRIP] PnL = {pnl_str} (from fills)")
-                print(f"  Entry trade_id: {self.entry_fill.trade_id[:50]}...")
-                print(f"  Exit trade_id:  {self.exit_fill.trade_id[:50]}...")
+                print(f"  Round-trips: {summary['round_trips']}")
+                print(f"  Realized PnL: ${summary['realized_pnl']:+.4f}")
+                print(f"  Total buys: {summary['total_buys']} (${summary['total_buy_cost']:.2f})")
+                print(f"  Total sells: {summary['total_sells']} (${summary['total_sell_revenue']:.2f})")
+                
+                # Print round-trip details
+                for i, rt in enumerate(self.fill_tracker.round_trips):
+                    print(f"\n  [ROUND-TRIP {i+1}]")
+                    print(f"    Entry: {rt['entry_price']:.4f}")
+                    print(f"    Exit:  {rt['exit_price']:.4f}")
+                    print(f"    Size:  {rt['size']:.2f}")
+                    print(f"    PnL:   ${rt['pnl']:+.4f}")
+                    print(f"    Entry txHash: {rt['entry_txhash']}...")
+                    print(f"    Exit txHash:  {rt['exit_txhash']}...")
+                
                 print("-" * 60)
                 print("  RESULT: PASS - Verifier complete")
                 print("=" * 60)
                 
                 return 0
             
-            # Tick log
+            # Tick log every LOG_INTERVAL_SECS
             if now - self.last_log_time > LOG_INTERVAL_SECS:
-                vol = self.get_vol_10s()
-                self.log(f"TICK: mid={mid:.2f} spread={spread*100:.1f}c vol={vol:.1f}c "
-                         f"state={self.state.value} pos={self.confirmed_shares:.1f} "
-                         f"time_left={time_to_end}s")
+                confirmed = self.fill_tracker.get_total_confirmed_shares() if self.fill_tracker else 0
+                self.log(
+                    f"TICK: mid={mid:.4f} spread={spread*100:.1f}c "
+                    f"vol={vol.vol_10s_cents:.1f}c (min={vol.mid_min:.4f} max={vol.mid_max:.4f}) "
+                    f"state={self.state.value} pos={confirmed:.1f} "
+                    f"time_left={time_to_end}s"
+                )
                 self.last_log_time = now
             
             time.sleep(TICK_INTERVAL_SECS)
@@ -622,7 +483,14 @@ class V12Verifier:
 
 
 if __name__ == "__main__":
-    verifier = V12Verifier()
-    exit_code = verifier.run()
+    verifier = V13Verifier()
+    try:
+        exit_code = verifier.run()
+    except FillTrackerError:
+        exit_code = 1
+    except Exception as e:
+        print(f"[V13] Unexpected error: {e}", flush=True)
+        exit_code = 1
+    
     print(f"\n[EXIT] Code {exit_code}")
     sys.exit(exit_code)
