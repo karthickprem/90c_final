@@ -399,4 +399,3 @@ class FillTrackerV13:
             'open_positions': sum(1 for p in self.positions.values() if p.is_open),
             'total_shares': self.get_total_confirmed_shares()
         }
-

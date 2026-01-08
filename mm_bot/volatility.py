@@ -161,4 +161,3 @@ def compute_vol_distribution(ticks: list, window_secs: float = 10.0) -> dict:
         'P99': percentile(99),
         'count': n
     }
-
