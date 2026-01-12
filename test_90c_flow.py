@@ -1,26 +1,34 @@
 """
-Test 90c Trading Flow - DUAL STATE MACHINE Version
-====================================================
-Implements the EXACT backtest logic with independent UP/DOWN state machines:
+Test 85c Trading Flow - DUAL STATE MACHINE Version (OPTIMIZED)
+===============================================================
+Implements the EXACT backtest logic with independent UP/DOWN state machines.
+
+OPTIMIZED PARAMETERS (from 50-day backtest):
+  - Entry: 85c in LAST 6 MINUTES only
+  - Take Profit: 98c
+  - Stop Loss: 55c (tighter SL = higher win rate)
+  - Position Size: 5% of balance per trade
 
 STATE MACHINE (per side - UP and DOWN are INDEPENDENT):
-  - IDLE: No position, TP not hit → Can enter if price >= 90c
-  - IN TRADE: Position active → Wait for TP (98c) or SL (75c)
-  - DONE: TP hit → Locked out for rest of window ⛔
+  - IDLE: No position, TP not hit → Can enter if price >= 85c AND in last 6 min
+  - IN TRADE: Position active → Wait for TP (98c) or SL (55c)
+  - DONE: TP or SL hit → Locked out for rest of window ⛔
 
 KEY RULES:
-  ✅ After SL: tp_hit stays False → CAN re-enter if 90c hits again
-  ❌ After TP: tp_hit = True → LOCKED OUT for rest of window
+  ✅ Entry only in last 6 minutes of window
+  ❌ After SL: Locked out for rest of window
+  ❌ After TP: Locked out for rest of window
   ✅ UP and DOWN trade independently (can both be active!)
   ❌ No pyramiding (one position per side max)
 
 FLOW:
   1. WebSocket reads UP/DOWN prices continuously
-  2. If UP at 90c AND up_position=None AND up_tp_hit=False → Enter UP
-  3. If DOWN at 90c AND down_position=None AND down_tp_hit=False → Enter DOWN
-  4. Exit at TP (98c) → Lock out that side
-  5. Exit at SL (75c) → Lock out that side (no re-entry)
-  6. Window end → Close all positions, reset flags
+  2. Wait until last 6 min of window (360s remaining)
+  3. If UP at 85c AND up_position=None AND not locked out → Enter UP
+  4. If DOWN at 85c AND down_position=None AND not locked out → Enter DOWN
+  5. Exit at TP (98c) → Lock out that side
+  6. Exit at SL (55c) → Lock out that side
+  7. Window end → Close all positions, reset flags
 
 Usage:
     DRY RUN:   python test_90c_flow.py
@@ -64,14 +72,17 @@ CLOB_HOST = "https://clob.polymarket.com"
 WS_URL = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
 
 # Trading thresholds
-ENTRY_THRESHOLD = 0.90   # 90c - trigger entry
+ENTRY_THRESHOLD = 0.85   # 85c - trigger entry (optimized from backtest)
 TP_THRESHOLD = 0.98      # 98c - take profit
-SL_THRESHOLD = 0.75      # 75c - stop loss
+SL_THRESHOLD = 0.55      # 55c - stop loss (optimized from backtest)
 
-# Capital management - 50% compounding
-CAPITAL_PERCENTAGE = 0.75  # Use 75% of balance per trade
+# Entry timing - only in last 6 minutes of window
+ENTRY_WINDOW_SECS = 360  # Last 6 minutes = 360 seconds
+
+# Capital management - 5% per trade
+CAPITAL_PERCENTAGE = 0.05  # Use 5% of balance per trade
 RUN_DURATION_SECS = 86400  # 24 hours
-INITIAL_BALANCE = 10.00    # Starting paper balance ($10)
+INITIAL_BALANCE = 100.00   # Starting paper balance ($100)
 
 # Reconnection settings
 MAX_RECONNECT_ATTEMPTS = 5   # Max retries within same window
@@ -170,7 +181,7 @@ class DualLogger:
     def _write_header(self):
         header = f"""
 ================================================================================
-  90c STRATEGY TEST LOG
+  85c STRATEGY TEST LOG
   Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
   Mode: {'DRY RUN' if DRY_RUN else 'LIVE'}
   Duration: {RUN_DURATION_SECS // 60} minutes
@@ -1264,14 +1275,14 @@ async def test_90c_flow_multiwindow():
     """Main test with TP/SL tracking across multiple windows"""
     
     # Create log file with timestamp
-    log_filename = f"90c_test_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    log_filename = f"85c_test_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
     logger = DualLogger(log_filename)
     
     # Excel file for trade data
-    excel_filename = f"90c_trades_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    excel_filename = f"85c_trades_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
     
     logger.raw("\n" + "="*80)
-    logger.raw("  TEST 90c - DUAL STATE MACHINE (UP & DOWN INDEPENDENT)")
+    logger.raw("  TEST 85c - DUAL STATE MACHINE (UP & DOWN INDEPENDENT)")
     logger.raw("="*80)
     logger.raw(f"  MODE: {'🔴 LIVE' if not DRY_RUN else '🟢 DRY RUN'}")
     logger.raw(f"  Entry:       {ENTRY_THRESHOLD*100:.0f}c")
@@ -1284,9 +1295,10 @@ async def test_90c_flow_multiwindow():
     logger.raw(f"  Excel file:  {excel_filename}")
     logger.raw("")
     logger.raw("  FEES: Polymarket taker fee = p*(1-p)*6.24%")
-    logger.raw(f"         @90c entry: ~{calculate_fee_cents(0.90):.2f}c | @98c exit: ~{calculate_fee_cents(0.98):.2f}c | @75c exit: ~{calculate_fee_cents(0.75):.2f}c")
+    logger.raw(f"         @{ENTRY_THRESHOLD*100:.0f}c entry: ~{calculate_fee_cents(ENTRY_THRESHOLD):.2f}c | @{TP_THRESHOLD*100:.0f}c exit: ~{calculate_fee_cents(TP_THRESHOLD):.2f}c | @{SL_THRESHOLD*100:.0f}c exit: ~{calculate_fee_cents(SL_THRESHOLD):.2f}c")
     logger.raw("")
-    logger.raw("  LOGIC: SL→Locked⛔ | TP→Locked⛔ | UP≠DOWN (independent)")
+    logger.raw(f"  Entry Window: Last {ENTRY_WINDOW_SECS // 60} minutes only")
+    logger.raw("  LOGIC: Entry in last 6min | SL→Locked⛔ | TP→Locked⛔ | UP≠DOWN (independent)")
     logger.raw("="*80 + "\n")
     
     if not DRY_RUN:
@@ -1554,7 +1566,7 @@ async def test_90c_flow_multiwindow():
                             logger.log(f"[WS] DOWN position preserved: @ {down_position.entry_price:.2f}")
                         
                         logger.raw("-"*80)
-                        logger.raw("  MONITORING - Entry@90c, TP@98c, SL@75c")
+                        logger.raw(f"  MONITORING - Entry@{ENTRY_THRESHOLD*100:.0f}c, TP@{TP_THRESHOLD*100:.0f}c, SL@{SL_THRESHOLD*100:.0f}c")
                         logger.raw(f"  Log frequency: {LOG_INTERVAL_SECS*1000:.0f}ms ({'VERBOSE' if DRY_RUN else 'NORMAL'})")
                         logger.raw("-"*80 + "\n")
                         
@@ -1781,17 +1793,22 @@ async def test_90c_flow_multiwindow():
                                 # ============================================================
                                 
                                 # -------------------- UP (YES) SIDE --------------------
-                                # UP ENTRY: Check conditions including spread
+                                # UP ENTRY: Check conditions including spread AND timing (last 6 min only)
                                 up_spread = up_book.best_ask - up_book.best_bid if up_book.valid else 1.0
+                                in_entry_window = secs_left <= ENTRY_WINDOW_SECS  # Last 6 minutes only
                                 
                                 # Debug: Log why entry not triggered when price is at threshold
                                 if up_book.valid and up_book.best_ask >= ENTRY_THRESHOLD and up_position is None and not up_tp_hit:
-                                    if up_spread > 0.02:
+                                    if not in_entry_window:
+                                        # Only log occasionally to avoid spam
+                                        if int(time.time()) % 30 == 0:
+                                            logger.log(f"[UP] SKIP - Not in entry window ({secs_left}s left, need <= {ENTRY_WINDOW_SECS}s)")
+                                    elif up_spread > 0.02:
                                         # Only log occasionally to avoid spam
                                         if int(time.time()) % 10 == 0:
                                             logger.log(f"[UP] SKIP - Spread too wide: {up_spread:.2f} (need <= 0.02)")
                                 
-                                if up_position is None and not up_tp_hit and up_book.valid and up_book.best_ask >= ENTRY_THRESHOLD and up_spread <= 0.02:  # 2c max spread
+                                if up_position is None and not up_tp_hit and up_book.valid and up_book.best_ask >= ENTRY_THRESHOLD and up_spread <= 0.02 and in_entry_window:  # 2c max spread + last 6 min
                                     # NOTE: Removed cancel_all() - it cancels ALL markets!
                                     # The 60s polling + specific order cancel handles orphan orders
                                     
@@ -2043,9 +2060,22 @@ async def test_90c_flow_multiwindow():
                                             up_position = None
                                 
                                 # -------------------- DOWN (NO) SIDE --------------------
-                                # DOWN ENTRY: Check conditions including spread (INDEPENDENT from UP!)
+                                # DOWN ENTRY: Check conditions including spread AND timing (last 6 min only)
                                 down_spread = down_book.best_ask - down_book.best_bid if down_book.valid else 1.0
-                                if down_position is None and not down_tp_hit and down_book.valid and down_book.best_ask >= ENTRY_THRESHOLD and down_spread <= 0.02:  # 2c max spread
+                                # in_entry_window already calculated above for UP side
+                                
+                                # Debug: Log why entry not triggered when price is at threshold
+                                if down_book.valid and down_book.best_ask >= ENTRY_THRESHOLD and down_position is None and not down_tp_hit:
+                                    if not in_entry_window:
+                                        # Only log occasionally to avoid spam
+                                        if int(time.time()) % 30 == 0:
+                                            logger.log(f"[DOWN] SKIP - Not in entry window ({secs_left}s left, need <= {ENTRY_WINDOW_SECS}s)")
+                                    elif down_spread > 0.02:
+                                        # Only log occasionally to avoid spam
+                                        if int(time.time()) % 10 == 0:
+                                            logger.log(f"[DOWN] SKIP - Spread too wide: {down_spread:.2f} (need <= 0.02)")
+                                
+                                if down_position is None and not down_tp_hit and down_book.valid and down_book.best_ask >= ENTRY_THRESHOLD and down_spread <= 0.02 and in_entry_window:  # 2c max spread + last 6 min
                                     # NOTE: Removed cancel_all() - it cancels ALL markets!
                                     # The 60s polling + specific order cancel handles orphan orders
                                     
@@ -2372,13 +2402,13 @@ async def test_90c_flow_multiwindow():
 
 if __name__ == "__main__":
     print("\n" + "="*80)
-    print("  90c FLOW TEST - DUAL STATE MACHINE VERSION")
+    print("  85c FLOW TEST - DUAL STATE MACHINE VERSION (OPTIMIZED)")
     print("="*80)
-    print("  UP and DOWN trade INDEPENDENTLY:")
-    print("    • Entry@90c → Hold → TP@98c or SL@75c")
-    print("    • After SL: Locked out (no re-entry)")
-    print("    • After TP: Locked out ⛔")
-    print("    • Both sides can be active simultaneously!")
+    print("  OPTIMIZED STRATEGY (from 50-day backtest):")
+    print(f"    • Entry@{ENTRY_THRESHOLD*100:.0f}c in LAST {ENTRY_WINDOW_SECS // 60} MINUTES only")
+    print(f"    • TP@{TP_THRESHOLD*100:.0f}c | SL@{SL_THRESHOLD*100:.0f}c")
+    print("    • After SL or TP: Locked out for rest of window")
+    print("    • UP and DOWN trade independently")
     print("")
     print("  CAPITAL MANAGEMENT:")
     print(f"    • Initial: ${INITIAL_BALANCE:.2f}")

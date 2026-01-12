@@ -66,10 +66,10 @@ WS_URL = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
 # Trading thresholds
 ENTRY_THRESHOLD = 0.90   # 90c - trigger entry
 TP_THRESHOLD = 0.98      # 98c - take profit
-SL_THRESHOLD = 0.75      # 75c - stop loss
+SL_THRESHOLD = 0.60      # 60c - stop loss
 
 # Capital management - 50% compounding
-CAPITAL_PERCENTAGE = 0.75  # Use 75% of balance per trade
+CAPITAL_PERCENTAGE = 1.00  # Use 100% of balance per trade
 RUN_DURATION_SECS = 86400  # 24 hours
 INITIAL_BALANCE = 10.00    # Starting paper balance ($10)
 
