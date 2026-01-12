@@ -81,7 +81,7 @@ ENTRY_WINDOW_SECS = 360  # Last 6 minutes = 360 seconds
 
 # Capital management - 5% per trade
 CAPITAL_PERCENTAGE = 0.05  # Use 5% of balance per trade
-RUN_DURATION_SECS = 86400  # 24 hours
+RUN_DURATION_SECS = 2592000  # 30 days (30 × 24 × 60 × 60)
 INITIAL_BALANCE = 100.00   # Starting paper balance ($100)
 
 # Reconnection settings
