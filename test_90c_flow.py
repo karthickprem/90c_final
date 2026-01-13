@@ -73,6 +73,7 @@ WS_URL = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
 
 # Trading thresholds
 ENTRY_THRESHOLD = 0.85   # 85c - trigger entry (optimized from backtest)
+MAX_ENTRY_THRESHOLD = 0.97  # 97c - skip entries above this (no room for profit)
 TP_THRESHOLD = 0.98      # 98c - take profit
 SL_THRESHOLD = 0.55      # 55c - stop loss (optimized from backtest)
 
@@ -1285,7 +1286,7 @@ async def test_90c_flow_multiwindow():
     logger.raw("  TEST 85c - DUAL STATE MACHINE (UP & DOWN INDEPENDENT)")
     logger.raw("="*80)
     logger.raw(f"  MODE: {'🔴 LIVE' if not DRY_RUN else '🟢 DRY RUN'}")
-    logger.raw(f"  Entry:       {ENTRY_THRESHOLD*100:.0f}c")
+    logger.raw(f"  Entry:       {ENTRY_THRESHOLD*100:.0f}c - {MAX_ENTRY_THRESHOLD*100:.0f}c")
     logger.raw(f"  Take Profit: {TP_THRESHOLD*100:.0f}c")
     logger.raw(f"  Stop Loss:   {SL_THRESHOLD*100:.0f}c")
     logger.raw(f"  Capital:     {CAPITAL_PERCENTAGE*100:.0f}% per trade (COMPOUNDING)")
@@ -1376,152 +1377,226 @@ async def test_90c_flow_multiwindow():
             window_complete = False
             
             while not window_complete and reconnect_attempts < MAX_RECONNECT_ATTEMPTS:
-                # Check if window still has time - FORCE EXIT at last 5 seconds
+                # Check if window still has time - handle positions at last 5 seconds
                 secs_left = market_end - int(time.time())
                 if secs_left < 5:
-                    logger.log(f"\n[WINDOW] Ending in {secs_left}s, FORCE EXIT...")
+                    logger.log(f"\n[WINDOW] Ending in {secs_left}s...")
                     
-                    # Force close UP position if any (HELD) - WITH RETRY
+                    # Handle UP position - SETTLEMENT if winning, FORCE EXIT if losing
                     if up_position:
-                        # CRITICAL: Validate position size before selling
                         force_sell_size = up_position.size
                         if force_sell_size <= 0:
-                            logger.log(f"[FORCE EXIT] UP ERROR: Invalid position size {force_sell_size}, clearing")
+                            logger.log(f"[END] UP ERROR: Invalid position size {force_sell_size}, clearing")
                             up_position = None
                         else:
-                            # Round for clean sell (sell exactly what we have)
                             force_sell_size = round(force_sell_size, 1)
-                            logger.log(f"[FORCE EXIT] UP position held @ {up_position.entry_price:.2f}, closing {force_sell_size} shares...")
+                            current_bid = up_book.best_bid if up_book.best_bid > 0.01 else 0.50
                             
-                            sell_success = False
-                            sell_attempt = 0
-                            max_force_attempts = 10
-                            
-                            while not sell_success and sell_attempt < max_force_attempts:
-                                sell_attempt += 1
-                                exit_price = up_book.best_bid if up_book.best_bid > 0.01 else 0.50
+                            # If winning (bid >= 80c), hold for SETTLEMENT at 100c
+                            if current_bid >= 0.80:
+                                logger.log(f"[SETTLEMENT] UP position @ {up_position.entry_price:.2f}, bid={current_bid:.2f} >= 0.80 - HOLDING FOR 100c SETTLEMENT")
                                 
-                                if sell_attempt > 1:
-                                    logger.log(f"[FORCE EXIT] UP Retry #{sell_attempt} at bid={exit_price:.2f}")
-                                    await asyncio.sleep(0.3)
+                                # Settlement price is 100c, NO exit fee for settlement
+                                settlement_price = 1.00
+                                exit_fee = 0.0  # No fee on settlement
+                                exit_fee_cents = 0.0
+                                entry_fee_cents = calculate_fee_cents(up_position.entry_price)
+                                total_fees = up_position.entry_fee  # Only entry fee
                                 
-                                result = client.sell_market(up_position.token_id, exit_price, force_sell_size, buy_order_id=up_position.buy_order_id)
+                                proceeds = balance_tracker.sell(settlement_price, force_sell_size, fee=0)
                                 
-                                if result.get("success"):
-                                    sell_success = True
-                                    fill_price = result.get("fill_price", exit_price)
+                                gross_pnl_cents = (settlement_price - up_position.entry_price) * 100
+                                net_pnl_cents = gross_pnl_cents - entry_fee_cents
+                                pnl_dollars = (settlement_price - up_position.entry_price) * force_sell_size - total_fees
+                                
+                                collector.add_pnl(net_pnl_cents * force_sell_size)
+                                collector.record_fill("SETTLEMENT", "UP", "SETTLE", settlement_price, force_sell_size, up_book)
+                                
+                                if up_position.trade_record:
+                                    excel_log.complete_trade(
+                                        record=up_position.trade_record,
+                                        exit_type="SETTLEMENT",
+                                        exit_price=settlement_price,
+                                        exit_bid=current_bid,
+                                        exit_ask=up_book.best_ask,
+                                        exit_fee=exit_fee,
+                                        exit_proceeds=proceeds,
+                                        gross_pnl_cents=gross_pnl_cents,
+                                        net_pnl_cents=net_pnl_cents,
+                                        net_pnl_dollars=pnl_dollars,
+                                        balance_after=balance_tracker.balance
+                                    )
+                                
+                                logger.log(f"[SETTLEMENT] UP @ 100c, Net PnL: ${pnl_dollars:+.4f} ✅")
+                                up_position = None
+                            else:
+                                # Position is losing, force exit
+                                logger.log(f"[FORCE EXIT] UP position held @ {up_position.entry_price:.2f}, bid={current_bid:.2f} < 0.80, closing {force_sell_size} shares...")
+                                
+                                sell_success = False
+                                sell_attempt = 0
+                                max_force_attempts = 10
+                                
+                                while not sell_success and sell_attempt < max_force_attempts:
+                                    sell_attempt += 1
+                                    exit_price = current_bid
                                     
-                                    # Calculate fees (use force_sell_size for accuracy)
-                                    exit_fee = calculate_polymarket_fee(fill_price, force_sell_size)
-                                    exit_fee_cents = calculate_fee_cents(fill_price)
-                                    entry_fee_cents = calculate_fee_cents(up_position.entry_price)
-                                    total_fees = up_position.entry_fee + exit_fee
+                                    if sell_attempt > 1:
+                                        logger.log(f"[FORCE EXIT] UP Retry #{sell_attempt} at bid={exit_price:.2f}")
+                                        await asyncio.sleep(0.3)
                                     
-                                    proceeds = balance_tracker.sell(fill_price, force_sell_size, fee=exit_fee)
+                                    result = client.sell_market(up_position.token_id, exit_price, force_sell_size, buy_order_id=up_position.buy_order_id)
                                     
-                                    gross_pnl_cents = (fill_price - up_position.entry_price) * 100
-                                    net_pnl_cents = gross_pnl_cents - entry_fee_cents - exit_fee_cents
-                                    pnl_dollars = (fill_price - up_position.entry_price) * force_sell_size - total_fees
-                                    
-                                    collector.add_pnl(net_pnl_cents * force_sell_size)
-                                    collector.record_fill("HELD", "UP", "SELL", fill_price, force_sell_size, up_book)
-                                    
-                                    if up_position.trade_record:
-                                        excel_log.complete_trade(
-                                            record=up_position.trade_record,
-                                            exit_type="HELD",
-                                            exit_price=fill_price,
-                                            exit_bid=up_book.best_bid,
-                                            exit_ask=up_book.best_ask,
-                                            exit_fee=exit_fee,
-                                            exit_proceeds=proceeds,
-                                            gross_pnl_cents=gross_pnl_cents,
-                                            net_pnl_cents=net_pnl_cents,
-                                            net_pnl_dollars=pnl_dollars,
-                                            balance_after=balance_tracker.balance
-                                        )
-                                    
-                                    logger.log(f"[FORCE EXIT] UP Sold @ {fill_price:.4f}, Net PnL: ${pnl_dollars:+.4f}")
-                                else:
-                                    error = result.get("error", "Unknown error")
-                                    logger.log(f"[FORCE EXIT] UP SELL FAILED (attempt {sell_attempt}): {error}")
-                            
-                            if not sell_success:
-                                logger.log(f"[FORCE EXIT] CRITICAL: UP position could not be sold! Going to settlement!")
-                            
-                            up_position = None
+                                    if result.get("success"):
+                                        sell_success = True
+                                        fill_price = result.get("fill_price", exit_price)
+                                        
+                                        exit_fee = calculate_polymarket_fee(fill_price, force_sell_size)
+                                        exit_fee_cents = calculate_fee_cents(fill_price)
+                                        entry_fee_cents = calculate_fee_cents(up_position.entry_price)
+                                        total_fees = up_position.entry_fee + exit_fee
+                                        
+                                        proceeds = balance_tracker.sell(fill_price, force_sell_size, fee=exit_fee)
+                                        
+                                        gross_pnl_cents = (fill_price - up_position.entry_price) * 100
+                                        net_pnl_cents = gross_pnl_cents - entry_fee_cents - exit_fee_cents
+                                        pnl_dollars = (fill_price - up_position.entry_price) * force_sell_size - total_fees
+                                        
+                                        collector.add_pnl(net_pnl_cents * force_sell_size)
+                                        collector.record_fill("HELD", "UP", "SELL", fill_price, force_sell_size, up_book)
+                                        
+                                        if up_position.trade_record:
+                                            excel_log.complete_trade(
+                                                record=up_position.trade_record,
+                                                exit_type="HELD",
+                                                exit_price=fill_price,
+                                                exit_bid=up_book.best_bid,
+                                                exit_ask=up_book.best_ask,
+                                                exit_fee=exit_fee,
+                                                exit_proceeds=proceeds,
+                                                gross_pnl_cents=gross_pnl_cents,
+                                                net_pnl_cents=net_pnl_cents,
+                                                net_pnl_dollars=pnl_dollars,
+                                                balance_after=balance_tracker.balance
+                                            )
+                                        
+                                        logger.log(f"[FORCE EXIT] UP Sold @ {fill_price:.4f}, Net PnL: ${pnl_dollars:+.4f}")
+                                    else:
+                                        error = result.get("error", "Unknown error")
+                                        logger.log(f"[FORCE EXIT] UP SELL FAILED (attempt {sell_attempt}): {error}")
+                                
+                                if not sell_success:
+                                    logger.log(f"[FORCE EXIT] CRITICAL: UP position could not be sold! Going to settlement!")
+                                
+                                up_position = None
                     
-                    # Force close DOWN position if any (HELD) - WITH RETRY
+                    # Handle DOWN position - SETTLEMENT if winning, FORCE EXIT if losing
                     if down_position:
-                        # CRITICAL: Validate position size before selling
                         force_sell_size = down_position.size
                         if force_sell_size <= 0:
-                            logger.log(f"[FORCE EXIT] DOWN ERROR: Invalid position size {force_sell_size}, clearing")
+                            logger.log(f"[END] DOWN ERROR: Invalid position size {force_sell_size}, clearing")
                             down_position = None
                         else:
-                            # Round for clean sell (sell exactly what we have)
                             force_sell_size = round(force_sell_size, 1)
-                            logger.log(f"[FORCE EXIT] DOWN position held @ {down_position.entry_price:.2f}, closing {force_sell_size} shares...")
+                            current_bid = down_book.best_bid if down_book.best_bid > 0.01 else 0.50
                             
-                            sell_success = False
-                            sell_attempt = 0
-                            max_force_attempts = 10
-                            
-                            while not sell_success and sell_attempt < max_force_attempts:
-                                sell_attempt += 1
-                                exit_price = down_book.best_bid if down_book.best_bid > 0.01 else 0.50
+                            # If winning (bid >= 80c), hold for SETTLEMENT at 100c
+                            if current_bid >= 0.80:
+                                logger.log(f"[SETTLEMENT] DOWN position @ {down_position.entry_price:.2f}, bid={current_bid:.2f} >= 0.80 - HOLDING FOR 100c SETTLEMENT")
                                 
-                                if sell_attempt > 1:
-                                    logger.log(f"[FORCE EXIT] DOWN Retry #{sell_attempt} at bid={exit_price:.2f}")
-                                    await asyncio.sleep(0.3)
+                                # Settlement price is 100c, NO exit fee for settlement
+                                settlement_price = 1.00
+                                exit_fee = 0.0  # No fee on settlement
+                                exit_fee_cents = 0.0
+                                entry_fee_cents = calculate_fee_cents(down_position.entry_price)
+                                total_fees = down_position.entry_fee  # Only entry fee
                                 
-                                result = client.sell_market(down_position.token_id, exit_price, force_sell_size, buy_order_id=down_position.buy_order_id)
+                                proceeds = balance_tracker.sell(settlement_price, force_sell_size, fee=0)
                                 
-                                if result.get("success"):
-                                    sell_success = True
-                                    fill_price = result.get("fill_price", exit_price)
+                                gross_pnl_cents = (settlement_price - down_position.entry_price) * 100
+                                net_pnl_cents = gross_pnl_cents - entry_fee_cents
+                                pnl_dollars = (settlement_price - down_position.entry_price) * force_sell_size - total_fees
+                                
+                                collector.add_pnl(net_pnl_cents * force_sell_size)
+                                collector.record_fill("SETTLEMENT", "DOWN", "SETTLE", settlement_price, force_sell_size, down_book)
+                                
+                                if down_position.trade_record:
+                                    excel_log.complete_trade(
+                                        record=down_position.trade_record,
+                                        exit_type="SETTLEMENT",
+                                        exit_price=settlement_price,
+                                        exit_bid=current_bid,
+                                        exit_ask=down_book.best_ask,
+                                        exit_fee=exit_fee,
+                                        exit_proceeds=proceeds,
+                                        gross_pnl_cents=gross_pnl_cents,
+                                        net_pnl_cents=net_pnl_cents,
+                                        net_pnl_dollars=pnl_dollars,
+                                        balance_after=balance_tracker.balance
+                                    )
+                                
+                                logger.log(f"[SETTLEMENT] DOWN @ 100c, Net PnL: ${pnl_dollars:+.4f} ✅")
+                                down_position = None
+                            else:
+                                # Position is losing, force exit
+                                logger.log(f"[FORCE EXIT] DOWN position held @ {down_position.entry_price:.2f}, bid={current_bid:.2f} < 0.80, closing {force_sell_size} shares...")
+                                
+                                sell_success = False
+                                sell_attempt = 0
+                                max_force_attempts = 10
+                                
+                                while not sell_success and sell_attempt < max_force_attempts:
+                                    sell_attempt += 1
+                                    exit_price = current_bid
                                     
-                                    # Calculate fees (use force_sell_size for accuracy)
-                                    exit_fee = calculate_polymarket_fee(fill_price, force_sell_size)
-                                    exit_fee_cents = calculate_fee_cents(fill_price)
-                                    entry_fee_cents = calculate_fee_cents(down_position.entry_price)
-                                    total_fees = down_position.entry_fee + exit_fee
+                                    if sell_attempt > 1:
+                                        logger.log(f"[FORCE EXIT] DOWN Retry #{sell_attempt} at bid={exit_price:.2f}")
+                                        await asyncio.sleep(0.3)
                                     
-                                    proceeds = balance_tracker.sell(fill_price, force_sell_size, fee=exit_fee)
+                                    result = client.sell_market(down_position.token_id, exit_price, force_sell_size, buy_order_id=down_position.buy_order_id)
                                     
-                                    gross_pnl_cents = (fill_price - down_position.entry_price) * 100
-                                    net_pnl_cents = gross_pnl_cents - entry_fee_cents - exit_fee_cents
-                                    pnl_dollars = (fill_price - down_position.entry_price) * force_sell_size - total_fees
-                                    
-                                    collector.add_pnl(net_pnl_cents * force_sell_size)
-                                    collector.record_fill("HELD", "DOWN", "SELL", fill_price, force_sell_size, down_book)
-                                    
-                                    if down_position.trade_record:
-                                        excel_log.complete_trade(
-                                            record=down_position.trade_record,
-                                            exit_type="HELD",
-                                            exit_price=fill_price,
-                                            exit_bid=down_book.best_bid,
-                                            exit_ask=down_book.best_ask,
-                                            exit_fee=exit_fee,
-                                            exit_proceeds=proceeds,
-                                            gross_pnl_cents=gross_pnl_cents,
-                                            net_pnl_cents=net_pnl_cents,
-                                            net_pnl_dollars=pnl_dollars,
-                                            balance_after=balance_tracker.balance
-                                        )
-                                    
-                                    logger.log(f"[FORCE EXIT] DOWN Sold @ {fill_price:.4f}, Net PnL: ${pnl_dollars:+.4f}")
-                                else:
-                                    error = result.get("error", "Unknown error")
-                                    logger.log(f"[FORCE EXIT] DOWN SELL FAILED (attempt {sell_attempt}): {error}")
-                            
-                            if not sell_success:
-                                logger.log(f"[FORCE EXIT] CRITICAL: DOWN position could not be sold! Going to settlement!")
-                            
-                            down_position = None
-                        
-                        down_position = None
+                                    if result.get("success"):
+                                        sell_success = True
+                                        fill_price = result.get("fill_price", exit_price)
+                                        
+                                        exit_fee = calculate_polymarket_fee(fill_price, force_sell_size)
+                                        exit_fee_cents = calculate_fee_cents(fill_price)
+                                        entry_fee_cents = calculate_fee_cents(down_position.entry_price)
+                                        total_fees = down_position.entry_fee + exit_fee
+                                        
+                                        proceeds = balance_tracker.sell(fill_price, force_sell_size, fee=exit_fee)
+                                        
+                                        gross_pnl_cents = (fill_price - down_position.entry_price) * 100
+                                        net_pnl_cents = gross_pnl_cents - entry_fee_cents - exit_fee_cents
+                                        pnl_dollars = (fill_price - down_position.entry_price) * force_sell_size - total_fees
+                                        
+                                        collector.add_pnl(net_pnl_cents * force_sell_size)
+                                        collector.record_fill("HELD", "DOWN", "SELL", fill_price, force_sell_size, down_book)
+                                        
+                                        if down_position.trade_record:
+                                            excel_log.complete_trade(
+                                                record=down_position.trade_record,
+                                                exit_type="HELD",
+                                                exit_price=fill_price,
+                                                exit_bid=down_book.best_bid,
+                                                exit_ask=down_book.best_ask,
+                                                exit_fee=exit_fee,
+                                                exit_proceeds=proceeds,
+                                                gross_pnl_cents=gross_pnl_cents,
+                                                net_pnl_cents=net_pnl_cents,
+                                                net_pnl_dollars=pnl_dollars,
+                                                balance_after=balance_tracker.balance
+                                            )
+                                        
+                                        logger.log(f"[FORCE EXIT] DOWN Sold @ {fill_price:.4f}, Net PnL: ${pnl_dollars:+.4f}")
+                                    else:
+                                        error = result.get("error", "Unknown error")
+                                        logger.log(f"[FORCE EXIT] DOWN SELL FAILED (attempt {sell_attempt}): {error}")
+                                
+                                if not sell_success:
+                                    logger.log(f"[FORCE EXIT] CRITICAL: DOWN position could not be sold! Going to settlement!")
+                                
+                                down_position = None
                     
                     # ============================================================
                     # END OF WINDOW: Sync balance with blockchain (LIVE ONLY)
@@ -1581,147 +1656,219 @@ async def test_90c_flow_multiwindow():
                             
                             secs_left = market_end - int(time.time())
                             if secs_left < 5:
-                                logger.log(f"\n[WINDOW] Ending in {secs_left}s, FORCE EXIT...")
+                                logger.log(f"\n[WINDOW] Ending in {secs_left}s...")
                                 
-                                # Force close UP position if any (HELD) - WITH RETRY
+                                # Handle UP position - SETTLEMENT if winning, FORCE EXIT if losing
                                 if up_position:
-                                    # CRITICAL: Validate position size before selling
                                     force_sell_size = up_position.size
                                     if force_sell_size <= 0:
-                                        logger.log(f"[FORCE EXIT] UP ERROR: Invalid position size {force_sell_size}, clearing")
+                                        logger.log(f"[END] UP ERROR: Invalid position size {force_sell_size}, clearing")
                                         up_position = None
                                     else:
-                                        # Round for clean sell (sell exactly what we have)
                                         force_sell_size = round(force_sell_size, 1)
-                                        logger.log(f"[FORCE EXIT] UP position held @ {up_position.entry_price:.2f}, closing {force_sell_size} shares...")
+                                        current_bid = up_book.best_bid if up_book.best_bid > 0.01 else 0.50
                                         
-                                        sell_success = False
-                                        sell_attempt = 0
-                                        max_force_attempts = 10
-                                        
-                                        while not sell_success and sell_attempt < max_force_attempts:
-                                            sell_attempt += 1
-                                            exit_price = up_book.best_bid if up_book.best_bid > 0.01 else 0.50
+                                        # If winning (bid >= 80c), hold for SETTLEMENT at 100c
+                                        if current_bid >= 0.80:
+                                            logger.log(f"[SETTLEMENT] UP position @ {up_position.entry_price:.2f}, bid={current_bid:.2f} >= 0.80 - HOLDING FOR 100c SETTLEMENT")
                                             
-                                            if sell_attempt > 1:
-                                                logger.log(f"[FORCE EXIT] UP Retry #{sell_attempt} at bid={exit_price:.2f}")
-                                                await asyncio.sleep(0.3)
+                                            settlement_price = 1.00
+                                            exit_fee = 0.0
+                                            exit_fee_cents = 0.0
+                                            entry_fee_cents = calculate_fee_cents(up_position.entry_price)
+                                            total_fees = up_position.entry_fee
                                             
-                                            result = client.sell_market(up_position.token_id, exit_price, force_sell_size, buy_order_id=up_position.buy_order_id)
+                                            proceeds = balance_tracker.sell(settlement_price, force_sell_size, fee=0)
                                             
-                                            if result.get("success"):
-                                                sell_success = True
-                                                fill_price = result.get("fill_price", exit_price)
+                                            gross_pnl_cents = (settlement_price - up_position.entry_price) * 100
+                                            net_pnl_cents = gross_pnl_cents - entry_fee_cents
+                                            pnl_dollars = (settlement_price - up_position.entry_price) * force_sell_size - total_fees
+                                            
+                                            collector.add_pnl(net_pnl_cents * force_sell_size)
+                                            collector.record_fill("SETTLEMENT", "UP", "SETTLE", settlement_price, force_sell_size, up_book)
+                                            
+                                            if up_position.trade_record:
+                                                excel_log.complete_trade(
+                                                    record=up_position.trade_record,
+                                                    exit_type="SETTLEMENT",
+                                                    exit_price=settlement_price,
+                                                    exit_bid=current_bid,
+                                                    exit_ask=up_book.best_ask,
+                                                    exit_fee=exit_fee,
+                                                    exit_proceeds=proceeds,
+                                                    gross_pnl_cents=gross_pnl_cents,
+                                                    net_pnl_cents=net_pnl_cents,
+                                                    net_pnl_dollars=pnl_dollars,
+                                                    balance_after=balance_tracker.balance
+                                                )
+                                            
+                                            logger.log(f"[SETTLEMENT] UP @ 100c, Net PnL: ${pnl_dollars:+.4f} ✅")
+                                            up_position = None
+                                        else:
+                                            logger.log(f"[FORCE EXIT] UP position held @ {up_position.entry_price:.2f}, bid={current_bid:.2f} < 0.80, closing {force_sell_size} shares...")
+                                            
+                                            sell_success = False
+                                            sell_attempt = 0
+                                            max_force_attempts = 10
+                                            
+                                            while not sell_success and sell_attempt < max_force_attempts:
+                                                sell_attempt += 1
+                                                exit_price = current_bid
                                                 
-                                                # Calculate fees (use force_sell_size for accuracy)
-                                                exit_fee = calculate_polymarket_fee(fill_price, force_sell_size)
-                                                exit_fee_cents = calculate_fee_cents(fill_price)
-                                                entry_fee_cents = calculate_fee_cents(up_position.entry_price)
-                                                total_fees = up_position.entry_fee + exit_fee
+                                                if sell_attempt > 1:
+                                                    logger.log(f"[FORCE EXIT] UP Retry #{sell_attempt} at bid={exit_price:.2f}")
+                                                    await asyncio.sleep(0.3)
                                                 
-                                                proceeds = balance_tracker.sell(fill_price, force_sell_size, fee=exit_fee)
+                                                result = client.sell_market(up_position.token_id, exit_price, force_sell_size, buy_order_id=up_position.buy_order_id)
                                                 
-                                                gross_pnl_cents = (fill_price - up_position.entry_price) * 100
-                                                net_pnl_cents = gross_pnl_cents - entry_fee_cents - exit_fee_cents
-                                                pnl_dollars = (fill_price - up_position.entry_price) * force_sell_size - total_fees
-                                                
-                                                collector.add_pnl(net_pnl_cents * force_sell_size)
-                                                collector.record_fill("HELD", "UP", "SELL", fill_price, force_sell_size, up_book)
-                                                
-                                                if up_position.trade_record:
-                                                    excel_log.complete_trade(
-                                                        record=up_position.trade_record,
-                                                        exit_type="HELD",
-                                                        exit_price=fill_price,
-                                                        exit_bid=up_book.best_bid,
-                                                        exit_ask=up_book.best_ask,
-                                                        exit_fee=exit_fee,
-                                                        exit_proceeds=proceeds,
-                                                        gross_pnl_cents=gross_pnl_cents,
-                                                        net_pnl_cents=net_pnl_cents,
-                                                        net_pnl_dollars=pnl_dollars,
-                                                        balance_after=balance_tracker.balance
-                                                    )
-                                                
-                                                logger.log(f"[FORCE EXIT] UP Sold @ {fill_price:.4f}, Net PnL: ${pnl_dollars:+.4f}")
-                                            else:
-                                                error = result.get("error", "Unknown error")
-                                                logger.log(f"[FORCE EXIT] UP SELL FAILED (attempt {sell_attempt}): {error}")
-                                        
-                                        if not sell_success:
-                                            logger.log(f"[FORCE EXIT] CRITICAL: UP position could not be sold! Going to settlement!")
-                                        
-                                        up_position = None
+                                                if result.get("success"):
+                                                    sell_success = True
+                                                    fill_price = result.get("fill_price", exit_price)
+                                                    
+                                                    exit_fee = calculate_polymarket_fee(fill_price, force_sell_size)
+                                                    exit_fee_cents = calculate_fee_cents(fill_price)
+                                                    entry_fee_cents = calculate_fee_cents(up_position.entry_price)
+                                                    total_fees = up_position.entry_fee + exit_fee
+                                                    
+                                                    proceeds = balance_tracker.sell(fill_price, force_sell_size, fee=exit_fee)
+                                                    
+                                                    gross_pnl_cents = (fill_price - up_position.entry_price) * 100
+                                                    net_pnl_cents = gross_pnl_cents - entry_fee_cents - exit_fee_cents
+                                                    pnl_dollars = (fill_price - up_position.entry_price) * force_sell_size - total_fees
+                                                    
+                                                    collector.add_pnl(net_pnl_cents * force_sell_size)
+                                                    collector.record_fill("HELD", "UP", "SELL", fill_price, force_sell_size, up_book)
+                                                    
+                                                    if up_position.trade_record:
+                                                        excel_log.complete_trade(
+                                                            record=up_position.trade_record,
+                                                            exit_type="HELD",
+                                                            exit_price=fill_price,
+                                                            exit_bid=up_book.best_bid,
+                                                            exit_ask=up_book.best_ask,
+                                                            exit_fee=exit_fee,
+                                                            exit_proceeds=proceeds,
+                                                            gross_pnl_cents=gross_pnl_cents,
+                                                            net_pnl_cents=net_pnl_cents,
+                                                            net_pnl_dollars=pnl_dollars,
+                                                            balance_after=balance_tracker.balance
+                                                        )
+                                                    
+                                                    logger.log(f"[FORCE EXIT] UP Sold @ {fill_price:.4f}, Net PnL: ${pnl_dollars:+.4f}")
+                                                else:
+                                                    error = result.get("error", "Unknown error")
+                                                    logger.log(f"[FORCE EXIT] UP SELL FAILED (attempt {sell_attempt}): {error}")
+                                            
+                                            if not sell_success:
+                                                logger.log(f"[FORCE EXIT] CRITICAL: UP position could not be sold! Going to settlement!")
+                                            
+                                            up_position = None
                                 
-                                # Force close DOWN position if any (HELD) - WITH RETRY
+                                # Handle DOWN position - SETTLEMENT if winning, FORCE EXIT if losing
                                 if down_position:
-                                    # CRITICAL: Validate position size before selling
                                     force_sell_size = down_position.size
                                     if force_sell_size <= 0:
-                                        logger.log(f"[FORCE EXIT] DOWN ERROR: Invalid position size {force_sell_size}, clearing")
+                                        logger.log(f"[END] DOWN ERROR: Invalid position size {force_sell_size}, clearing")
                                         down_position = None
                                     else:
-                                        # Round for clean sell (sell exactly what we have)
                                         force_sell_size = round(force_sell_size, 1)
-                                        logger.log(f"[FORCE EXIT] DOWN position held @ {down_position.entry_price:.2f}, closing {force_sell_size} shares...")
+                                        current_bid = down_book.best_bid if down_book.best_bid > 0.01 else 0.50
                                         
-                                        sell_success = False
-                                        sell_attempt = 0
-                                        max_force_attempts = 10
-                                        
-                                        while not sell_success and sell_attempt < max_force_attempts:
-                                            sell_attempt += 1
-                                            exit_price = down_book.best_bid if down_book.best_bid > 0.01 else 0.50
+                                        # If winning (bid >= 80c), hold for SETTLEMENT at 100c
+                                        if current_bid >= 0.80:
+                                            logger.log(f"[SETTLEMENT] DOWN position @ {down_position.entry_price:.2f}, bid={current_bid:.2f} >= 0.80 - HOLDING FOR 100c SETTLEMENT")
                                             
-                                            if sell_attempt > 1:
-                                                logger.log(f"[FORCE EXIT] DOWN Retry #{sell_attempt} at bid={exit_price:.2f}")
-                                                await asyncio.sleep(0.3)
+                                            settlement_price = 1.00
+                                            exit_fee = 0.0
+                                            exit_fee_cents = 0.0
+                                            entry_fee_cents = calculate_fee_cents(down_position.entry_price)
+                                            total_fees = down_position.entry_fee
                                             
-                                            result = client.sell_market(down_position.token_id, exit_price, force_sell_size, buy_order_id=down_position.buy_order_id)
+                                            proceeds = balance_tracker.sell(settlement_price, force_sell_size, fee=0)
                                             
-                                            if result.get("success"):
-                                                sell_success = True
-                                                fill_price = result.get("fill_price", exit_price)
+                                            gross_pnl_cents = (settlement_price - down_position.entry_price) * 100
+                                            net_pnl_cents = gross_pnl_cents - entry_fee_cents
+                                            pnl_dollars = (settlement_price - down_position.entry_price) * force_sell_size - total_fees
+                                            
+                                            collector.add_pnl(net_pnl_cents * force_sell_size)
+                                            collector.record_fill("SETTLEMENT", "DOWN", "SETTLE", settlement_price, force_sell_size, down_book)
+                                            
+                                            if down_position.trade_record:
+                                                excel_log.complete_trade(
+                                                    record=down_position.trade_record,
+                                                    exit_type="SETTLEMENT",
+                                                    exit_price=settlement_price,
+                                                    exit_bid=current_bid,
+                                                    exit_ask=down_book.best_ask,
+                                                    exit_fee=exit_fee,
+                                                    exit_proceeds=proceeds,
+                                                    gross_pnl_cents=gross_pnl_cents,
+                                                    net_pnl_cents=net_pnl_cents,
+                                                    net_pnl_dollars=pnl_dollars,
+                                                    balance_after=balance_tracker.balance
+                                                )
+                                            
+                                            logger.log(f"[SETTLEMENT] DOWN @ 100c, Net PnL: ${pnl_dollars:+.4f} ✅")
+                                            down_position = None
+                                        else:
+                                            logger.log(f"[FORCE EXIT] DOWN position held @ {down_position.entry_price:.2f}, bid={current_bid:.2f} < 0.80, closing {force_sell_size} shares...")
+                                            
+                                            sell_success = False
+                                            sell_attempt = 0
+                                            max_force_attempts = 10
+                                            
+                                            while not sell_success and sell_attempt < max_force_attempts:
+                                                sell_attempt += 1
+                                                exit_price = current_bid
                                                 
-                                                # Calculate fees (use force_sell_size for accuracy)
-                                                exit_fee = calculate_polymarket_fee(fill_price, force_sell_size)
-                                                exit_fee_cents = calculate_fee_cents(fill_price)
-                                                entry_fee_cents = calculate_fee_cents(down_position.entry_price)
-                                                total_fees = down_position.entry_fee + exit_fee
+                                                if sell_attempt > 1:
+                                                    logger.log(f"[FORCE EXIT] DOWN Retry #{sell_attempt} at bid={exit_price:.2f}")
+                                                    await asyncio.sleep(0.3)
                                                 
-                                                proceeds = balance_tracker.sell(fill_price, force_sell_size, fee=exit_fee)
+                                                result = client.sell_market(down_position.token_id, exit_price, force_sell_size, buy_order_id=down_position.buy_order_id)
                                                 
-                                                gross_pnl_cents = (fill_price - down_position.entry_price) * 100
-                                                net_pnl_cents = gross_pnl_cents - entry_fee_cents - exit_fee_cents
-                                                pnl_dollars = (fill_price - down_position.entry_price) * force_sell_size - total_fees
-                                                
-                                                collector.add_pnl(net_pnl_cents * force_sell_size)
-                                                collector.record_fill("HELD", "DOWN", "SELL", fill_price, force_sell_size, down_book)
-                                                
-                                                if down_position.trade_record:
-                                                    excel_log.complete_trade(
-                                                        record=down_position.trade_record,
-                                                        exit_type="HELD",
-                                                        exit_price=fill_price,
-                                                        exit_bid=down_book.best_bid,
-                                                        exit_ask=down_book.best_ask,
-                                                        exit_fee=exit_fee,
-                                                        exit_proceeds=proceeds,
-                                                        gross_pnl_cents=gross_pnl_cents,
-                                                        net_pnl_cents=net_pnl_cents,
-                                                        net_pnl_dollars=pnl_dollars,
-                                                        balance_after=balance_tracker.balance
-                                                    )
-                                                
-                                                logger.log(f"[FORCE EXIT] DOWN Sold @ {fill_price:.4f}, Net PnL: ${pnl_dollars:+.4f}")
-                                            else:
-                                                error = result.get("error", "Unknown error")
-                                                logger.log(f"[FORCE EXIT] DOWN SELL FAILED (attempt {sell_attempt}): {error}")
-                                        
-                                        if not sell_success:
-                                            logger.log(f"[FORCE EXIT] CRITICAL: DOWN position could not be sold! Going to settlement!")
-                                        
-                                        down_position = None
+                                                if result.get("success"):
+                                                    sell_success = True
+                                                    fill_price = result.get("fill_price", exit_price)
+                                                    
+                                                    exit_fee = calculate_polymarket_fee(fill_price, force_sell_size)
+                                                    exit_fee_cents = calculate_fee_cents(fill_price)
+                                                    entry_fee_cents = calculate_fee_cents(down_position.entry_price)
+                                                    total_fees = down_position.entry_fee + exit_fee
+                                                    
+                                                    proceeds = balance_tracker.sell(fill_price, force_sell_size, fee=exit_fee)
+                                                    
+                                                    gross_pnl_cents = (fill_price - down_position.entry_price) * 100
+                                                    net_pnl_cents = gross_pnl_cents - entry_fee_cents - exit_fee_cents
+                                                    pnl_dollars = (fill_price - down_position.entry_price) * force_sell_size - total_fees
+                                                    
+                                                    collector.add_pnl(net_pnl_cents * force_sell_size)
+                                                    collector.record_fill("HELD", "DOWN", "SELL", fill_price, force_sell_size, down_book)
+                                                    
+                                                    if down_position.trade_record:
+                                                        excel_log.complete_trade(
+                                                            record=down_position.trade_record,
+                                                            exit_type="HELD",
+                                                            exit_price=fill_price,
+                                                            exit_bid=down_book.best_bid,
+                                                            exit_ask=down_book.best_ask,
+                                                            exit_fee=exit_fee,
+                                                            exit_proceeds=proceeds,
+                                                            gross_pnl_cents=gross_pnl_cents,
+                                                            net_pnl_cents=net_pnl_cents,
+                                                            net_pnl_dollars=pnl_dollars,
+                                                            balance_after=balance_tracker.balance
+                                                        )
+                                                    
+                                                    logger.log(f"[FORCE EXIT] DOWN Sold @ {fill_price:.4f}, Net PnL: ${pnl_dollars:+.4f}")
+                                                else:
+                                                    error = result.get("error", "Unknown error")
+                                                    logger.log(f"[FORCE EXIT] DOWN SELL FAILED (attempt {sell_attempt}): {error}")
+                                            
+                                            if not sell_success:
+                                                logger.log(f"[FORCE EXIT] CRITICAL: DOWN position could not be sold! Going to settlement!")
+                                            
+                                            down_position = None
                                 
                                 # ============================================================
                                 # END OF WINDOW: Sync balance with blockchain (LIVE ONLY)
@@ -1798,7 +1945,7 @@ async def test_90c_flow_multiwindow():
                                 in_entry_window = secs_left <= ENTRY_WINDOW_SECS  # Last 6 minutes only
                                 
                                 # Debug: Log why entry not triggered when price is at threshold
-                                if up_book.valid and up_book.best_ask >= ENTRY_THRESHOLD and up_position is None and not up_tp_hit:
+                                if up_book.valid and up_book.best_ask >= ENTRY_THRESHOLD and up_book.best_ask <= MAX_ENTRY_THRESHOLD and up_position is None and not up_tp_hit:
                                     if not in_entry_window:
                                         # Only log occasionally to avoid spam
                                         if int(time.time()) % 30 == 0:
@@ -1808,7 +1955,7 @@ async def test_90c_flow_multiwindow():
                                         if int(time.time()) % 10 == 0:
                                             logger.log(f"[UP] SKIP - Spread too wide: {up_spread:.2f} (need <= 0.02)")
                                 
-                                if up_position is None and not up_tp_hit and up_book.valid and up_book.best_ask >= ENTRY_THRESHOLD and up_spread <= 0.02 and in_entry_window:  # 2c max spread + last 6 min
+                                if up_position is None and not up_tp_hit and up_book.valid and up_book.best_ask >= ENTRY_THRESHOLD and up_book.best_ask <= MAX_ENTRY_THRESHOLD and up_spread <= 0.02 and in_entry_window:  # 2c max spread + last 6 min + 85-97c range
                                     # NOTE: Removed cancel_all() - it cancels ALL markets!
                                     # The 60s polling + specific order cancel handles orphan orders
                                     
@@ -2065,7 +2212,7 @@ async def test_90c_flow_multiwindow():
                                 # in_entry_window already calculated above for UP side
                                 
                                 # Debug: Log why entry not triggered when price is at threshold
-                                if down_book.valid and down_book.best_ask >= ENTRY_THRESHOLD and down_position is None and not down_tp_hit:
+                                if down_book.valid and down_book.best_ask >= ENTRY_THRESHOLD and down_book.best_ask <= MAX_ENTRY_THRESHOLD and down_position is None and not down_tp_hit:
                                     if not in_entry_window:
                                         # Only log occasionally to avoid spam
                                         if int(time.time()) % 30 == 0:
@@ -2075,7 +2222,7 @@ async def test_90c_flow_multiwindow():
                                         if int(time.time()) % 10 == 0:
                                             logger.log(f"[DOWN] SKIP - Spread too wide: {down_spread:.2f} (need <= 0.02)")
                                 
-                                if down_position is None and not down_tp_hit and down_book.valid and down_book.best_ask >= ENTRY_THRESHOLD and down_spread <= 0.02 and in_entry_window:  # 2c max spread + last 6 min
+                                if down_position is None and not down_tp_hit and down_book.valid and down_book.best_ask >= ENTRY_THRESHOLD and down_book.best_ask <= MAX_ENTRY_THRESHOLD and down_spread <= 0.02 and in_entry_window:  # 2c max spread + last 6 min + 85-97c range
                                     # NOTE: Removed cancel_all() - it cancels ALL markets!
                                     # The 60s polling + specific order cancel handles orphan orders
                                     
